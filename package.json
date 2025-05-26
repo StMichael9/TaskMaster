@@ -1,4 +1,10 @@
 {
+  "name": "todoapp",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "cd App && npm install && npm run build",
+    "start": "node backend/server.js"
+  },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "express": "^5.1.0",
@@ -6,6 +12,10 @@
     "react-router-dom": "^6.30.0",
     "sequelize": "^6.37.7",
     "sqlite3": "^5.1.7",
-    "uuid": "^11.1.0"
+    "uuid": "^11.1.0",
+    "cors": "^2.8.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
