@@ -1,0 +1,11 @@
+{
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "express": "^5.1.0",
+    "framer-motion": "^12.9.4",
+    "react-router-dom": "^6.30.0",
+    "sequelize": "^6.37.7",
+    "sqlite3": "^5.1.7",
+    "uuid": "^11.1.0"
+  }
+}
