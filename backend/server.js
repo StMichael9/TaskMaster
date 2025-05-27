@@ -36,7 +36,9 @@ const PORT = process.env.PORT || 3000;
 // Initialize Sequelize with SQLite
 const sequelize = new Sequelize({
   dialect: "sqlite",
-  storage: path.join(__dirname, "database.sqlite"),
+  storage: process.env.NODE_ENV === 'production' 
+    ? '/tmp/database.sqlite' 
+    : path.join(__dirname, "database.sqlite"),
   logging: false,
 });
 
@@ -119,6 +121,14 @@ sequelize
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Home endpoint
+app.get("/", (req, res) => {
+  res.json({
+    message: "TaskMaster API is running",
+    status: "online"
+  });
+});
 
 // Token refresh endpoint
 app.post("/refresh-token", async (req, res) => {
