@@ -9,6 +9,9 @@ const Login = () => {
   const [error, setError] = useState("");
   const [darkMode, setDarkMode] = useState(false);
   const navigate = useNavigate(); // Use the navigate hook for programmatic navigation
+  
+  // Get API URL from environment variables or use localhost as fallback
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
   // Check for dark mode preference
   useEffect(() => {
@@ -22,8 +25,8 @@ const Login = () => {
     setIsSubmitting(true);
 
     try {
-      // Change the port from 3000 to 5000 to match your backend server
-      const response = await fetch("http://localhost:3000/login", {
+      // Use the API_URL from environment variables
+      const response = await fetch(`${API_URL}/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -90,7 +93,7 @@ const Login = () => {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002-2h2a2 2 0 002 2M9 5a2 2 0 012-2h2a2 2 0 012 2"
                 />
               </svg>
             </div>
