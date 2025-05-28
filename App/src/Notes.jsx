@@ -10,6 +10,9 @@ const Notes = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const gridRef = useRef(null);
+  
+  // Add this line to get the API URL from environment variables
+  const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
   // Fetch notes from the server
   // First, extract fetchNotes to be a standalone function outside of useEffect
@@ -24,7 +27,7 @@ const Notes = () => {
         return;
       }
 
-      const response = await fetch("http://localhost:3000/notes", {
+      const response = await fetch(`${API_URL}/notes`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -119,7 +122,7 @@ const Notes = () => {
       for (const note of localNotes) {
         const { id, _isLocalOnly, ...noteData } = note; // Remove local id and flag
 
-        const response = await fetch("http://localhost:3000/notes", {
+        const response = await fetch(`${API_URL}/notes`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -217,7 +220,7 @@ useEffect(() => {
       const token = localStorage.getItem("token");
       if (!token) throw new Error("No authentication token found");
 
-      const response = await fetch("http://localhost:3000/notes", {
+      const response = await fetch(`${API_URL}/notes`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -275,7 +278,7 @@ useEffect(() => {
       const token = localStorage.getItem("token");
       if (!token) throw new Error("No authentication token found");
 
-      const response = await fetch(`http://localhost:3000/notes/${id}`, {
+      const response = await fetch(`${API_URL}/notes/${id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -313,7 +316,7 @@ useEffect(() => {
       const token = localStorage.getItem("token");
       if (!token) throw new Error("No authentication token found");
 
-      const response = await fetch(`http://localhost:3000/notes/${id}`, {
+      const response = await fetch(`${API_URL}/notes/${id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -358,7 +361,7 @@ useEffect(() => {
       const token = localStorage.getItem("token");
       if (!token) throw new Error("No authentication token found");
 
-      const response = await fetch(`http://localhost:3000/notes/${id}`, {
+      const response = await fetch(`${API_URL}/notes/${id}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
