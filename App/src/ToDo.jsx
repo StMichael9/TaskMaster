@@ -59,6 +59,8 @@ const ToDo = () => {
   const newTaskInputRef = useRef(null);
   const editTaskInputRef = useRef(null);
 
+  const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+
   useEffect(() => {
     const token = localStorage.getItem("token");
 
@@ -99,7 +101,7 @@ const ToDo = () => {
         }
 
         // If authenticated, fetch tasks from server
-        const response = await fetch("http://localhost:3000/tasks", {
+        const response = await fetch(`${API_URL}/tasks`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -243,7 +245,7 @@ const ToDo = () => {
         if (token) {
           try {
             // If authenticated, create task on backend
-            const response = await fetch("http://localhost:3000/tasks", {
+            const response = await fetch(`${API_URL}/tasks`, {
               method: "POST",
               headers: {
                 Authorization: `Bearer ${token}`,
@@ -312,17 +314,14 @@ const ToDo = () => {
       if (token) {
         try {
           // If authenticated, update on backend
-          const response = await fetch(
-            `http://localhost:3000/tasks/${taskId}`,
-            {
-              method: "PATCH",
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({ completed: newCompletedState }),
-            }
-          );
+          const response = await fetch(`${API_URL}/tasks/${taskId}`, {
+            method: "PATCH",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ completed: newCompletedState }),
+          });
 
           if (!response.ok) {
             // If server returns an error, log it but continue with local update
@@ -373,16 +372,13 @@ const ToDo = () => {
       if (token) {
         try {
           // If authenticated, delete from backend
-          const response = await fetch(
-            `http://localhost:3000/tasks/${taskId}`,
-            {
-              method: "DELETE",
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-              },
-            }
-          );
+          const response = await fetch(`${API_URL}/tasks/${taskId}`, {
+            method: "DELETE",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          });
 
           if (response.status === 401) {
             // Handle authentication error
@@ -438,24 +434,78 @@ const ToDo = () => {
   };
 
   // Function to save edited task
-  const saveEditTask = () => {
+  const saveEditTask = async () => {
     if (editText.trim()) {
-      setTasks(
-        tasks.map((task) =>
-          task.id === editingTask.id
-            ? {
-                ...task,
-                text: editText,
-                priority: editPriority,
-                category: editCategory,
-                dueDate: editDueDate
-                  ? new Date(editDueDate).toISOString()
-                  : null,
-              }
-            : task
-        )
-      );
-      cancelEditTask();
+      const updatedTask = {
+        text: editText,
+        priority: editPriority,
+        category: editCategory,
+        dueDate: editDueDate ? new Date(editDueDate).toISOString() : null,
+      };
+
+      try {
+        const token = localStorage.getItem("token");
+
+        if (token) {
+          try {
+            // If authenticated, update on backend
+            const response = await fetch(`${API_URL}/tasks/${editingTask.id}`, {
+              method: "PATCH",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(updatedTask),
+            });
+
+            if (!response.ok) {
+              console.warn(
+                `Server returned ${response.status} when updating task. Continuing with local update only.`
+              );
+            }
+          } catch (error) {
+            console.warn("Network or parsing error when updating task:", error);
+            // Continue with local update
+          }
+        }
+
+        // Always update local state regardless of server response
+        setTasks(
+          tasks.map((task) =>
+            task.id === editingTask.id
+              ? {
+                  ...task,
+                  text: editText,
+                  priority: editPriority,
+                  category: editCategory,
+                  dueDate: editDueDate
+                    ? new Date(editDueDate).toISOString()
+                    : null,
+                }
+              : task
+          )
+        );
+        cancelEditTask();
+      } catch (error) {
+        console.error("Error saving edited task:", error);
+        // Still update local state even if there was an error
+        setTasks(
+          tasks.map((task) =>
+            task.id === editingTask.id
+              ? {
+                  ...task,
+                  text: editText,
+                  priority: editPriority,
+                  category: editCategory,
+                  dueDate: editDueDate
+                    ? new Date(editDueDate).toISOString()
+                    : null,
+                }
+              : task
+          )
+        );
+        cancelEditTask();
+      }
     }
   };
 
