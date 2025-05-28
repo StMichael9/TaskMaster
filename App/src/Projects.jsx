@@ -14,7 +14,7 @@ const Projects = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [userId, setUserId] = useState(null);
-
+  const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
   // Load user ID and projects when component mounts
   useEffect(() => {
     // Get user ID from localStorage
@@ -49,7 +49,7 @@ const Projects = () => {
 
       console.log("Using token:", token.substring(0, 10) + "..."); // Debug the token being sent
 
-      const response = await fetch("http://localhost:3000/projects", {
+      const response = await fetch(`${API_URL}/projects`, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
@@ -106,7 +106,7 @@ const Projects = () => {
       }
 
       // Change the port from 3000 to 5000
-      const response = await fetch("http://localhost:3000/projects", {
+      const response = await fetch(`${API_URL}/projects`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -155,7 +155,7 @@ const Projects = () => {
 
           // API update
           const response = await fetch(
-            `http://localhost:3000/projects/${editingProject.id}`,
+            `${API_URL}/projects/${editingProject.id}`,
             {
               method: "PUT",
               headers: {
@@ -192,7 +192,7 @@ const Projects = () => {
           };
 
           // API create
-          const response = await fetch("http://localhost:3000/projects", {
+          const response = await fetch(`${API_URL}/projects`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -240,15 +240,12 @@ const Projects = () => {
       setProjects(projects.filter((project) => project.id !== projectId));
 
       // API delete
-      const response = await fetch(
-        `http://localhost:3000/projects/${projectId}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const response = await fetch(`${API_URL}/projects/${projectId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
       if (!response.ok) {
         throw new Error("Failed to delete project");
@@ -300,17 +297,14 @@ const Projects = () => {
       );
 
       // API update
-      const response = await fetch(
-        `http://localhost:3000/projects/${projectId}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(updatedProject),
-        }
-      );
+      const response = await fetch(`${API_URL}/projects/${projectId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(updatedProject),
+      });
 
       if (!response.ok) {
         throw new Error("Failed to update project completion status");
