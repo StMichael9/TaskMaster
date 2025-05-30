@@ -10,9 +10,10 @@ const Notes = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const gridRef = useRef(null);
-  
+
   // Add this line to get the API URL from environment variables
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+  console.log("Using API URL:", API_URL);
 
   // Fetch notes from the server
   // First, extract fetchNotes to be a standalone function outside of useEffect
@@ -27,7 +28,7 @@ const Notes = () => {
         return;
       }
 
-      const response = await fetch(`${API_URL}/notes`, {
+      const response = await fetch(API_URL + "/notes", {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -122,7 +123,7 @@ const Notes = () => {
       for (const note of localNotes) {
         const { id, _isLocalOnly, ...noteData } = note; // Remove local id and flag
 
-        const response = await fetch(`${API_URL}/notes`, {
+        const response = await fetch(API_URL + "/notes", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -132,7 +133,8 @@ const Notes = () => {
         });
 
         if (!response.ok) {
-          console.error("Failed to sync note to server:", note);
+          const errorText = await response.text();
+          console.error("Failed to sync note to server:", note, errorText);
           continue;
         }
       }
@@ -178,17 +180,27 @@ const Notes = () => {
       console.error("Error saving notes to localStorage:", error);
     }
   }, [notes]);
-// Add this useEffect right after your existing useEffect for saving local-only notes
-useEffect(() => {
-  // Save ALL notes to localStorage for the dashboard to access
-  try {
-    if (notes.length > 0) {
-      localStorage.setItem("stickyNotes", JSON.stringify(notes));
+  // Add this useEffect right after your existing useEffect for saving local-only notes
+  useEffect(() => {
+    // Save ALL notes to localStorage for the dashboard to access
+    try {
+      if (notes && notes.length > 0) {
+        console.log("Saving", notes.length, "notes to localStorage");
+        localStorage.setItem("stickyNotes", JSON.stringify(notes));
+      } else if (notes && notes.length === 0) {
+        // Don't clear localStorage if we have no notes but are still loading
+        if (!loading) {
+          console.log("No notes to save, clearing localStorage");
+          localStorage.removeItem("stickyNotes");
+        }
+      }
+    } catch (error) {
+      console.error(
+        "Error saving notes to stickyNotes in localStorage:",
+        error
+      );
     }
-  } catch (error) {
-    console.error("Error saving notes to stickyNotes in localStorage:", error);
-  }
-}, [notes]);
+  }, [notes, loading]);
 
   // Inject the handwritten font
   useEffect(() => {
@@ -220,7 +232,8 @@ useEffect(() => {
       const token = localStorage.getItem("token");
       if (!token) throw new Error("No authentication token found");
 
-      const response = await fetch(`${API_URL}/notes`, {
+      console.log("Adding note to server:", newNote);
+      const response = await fetch(API_URL + "/notes", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -229,9 +242,16 @@ useEffect(() => {
         body: JSON.stringify(newNote),
       });
 
-      if (!response.ok) throw new Error("Failed to create note");
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Failed to create note:", response.status, errorText);
+        throw new Error(
+          `Failed to create note: ${response.status} ${errorText}`
+        );
+      }
 
       const savedNote = await response.json();
+      console.log("Note saved successfully:", savedNote);
 
       // Add the new note to the state
       setNotes((prevNotes) => [savedNote, ...prevNotes]);
@@ -278,7 +298,7 @@ useEffect(() => {
       const token = localStorage.getItem("token");
       if (!token) throw new Error("No authentication token found");
 
-      const response = await fetch(`${API_URL}/notes/${id}`, {
+      const response = await fetch(API_URL + "/notes/" + id, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -316,7 +336,7 @@ useEffect(() => {
       const token = localStorage.getItem("token");
       if (!token) throw new Error("No authentication token found");
 
-      const response = await fetch(`${API_URL}/notes/${id}`, {
+      const response = await fetch(API_URL + "/notes/" + id, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -361,7 +381,7 @@ useEffect(() => {
       const token = localStorage.getItem("token");
       if (!token) throw new Error("No authentication token found");
 
-      const response = await fetch(`${API_URL}/notes/${id}`, {
+      const response = await fetch(API_URL + "/notes/" + id, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
