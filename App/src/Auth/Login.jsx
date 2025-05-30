@@ -11,7 +11,7 @@ const Login = () => {
   const navigate = useNavigate(); // Use the navigate hook for programmatic navigation
 
   // Get API URL from environment variables or use localhost as fallback
-  const API_URL = process.env.API_URL || "http://localhost:3000";
+  const API_URL = "https://taskmaster-backend-api.onrender.com";
 
   // Check for dark mode preference
   useEffect(() => {
