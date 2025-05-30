@@ -11,7 +11,9 @@ const SignUp = () => {
   const [darkMode, setDarkMode] = useState(false);
   const [agreeToTerms, setAgreeToTerms] = useState(false);
 
-  const API_URL = process.env.API_URL || "http://localhost:3000";
+  // Change this line:
+  const API_URL = "https://taskmaster-1-wf5e.onrender.com"; // Replace with your actual Render URL
+
   // Check for dark mode preference
   useEffect(() => {
     const isDarkMode = localStorage.getItem("darkMode") === "true";
