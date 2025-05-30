@@ -9,9 +9,9 @@ const Login = () => {
   const [error, setError] = useState("");
   const [darkMode, setDarkMode] = useState(false);
   const navigate = useNavigate(); // Use the navigate hook for programmatic navigation
-  
+
   // Get API URL from environment variables or use localhost as fallback
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+  const API_URL = process.env.API_URL || "http://localhost:3000";
 
   // Check for dark mode preference
   useEffect(() => {
