@@ -13,7 +13,6 @@ const Notes = () => {
 
   // Add this line to get the API URL from environment variables
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
-  console.log("Using API URL:", API_URL);
 
   // Fetch notes from the server
   // First, extract fetchNotes to be a standalone function outside of useEffect
@@ -28,7 +27,7 @@ const Notes = () => {
         return;
       }
 
-      const response = await fetch(API_URL + "/notes", {
+      const response = await fetch(`${API_URL}/notes`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -123,7 +122,7 @@ const Notes = () => {
       for (const note of localNotes) {
         const { id, _isLocalOnly, ...noteData } = note; // Remove local id and flag
 
-        const response = await fetch(API_URL + "/notes", {
+        const response = await fetch(`${API_URL}/notes`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -133,8 +132,7 @@ const Notes = () => {
         });
 
         if (!response.ok) {
-          const errorText = await response.text();
-          console.error("Failed to sync note to server:", note, errorText);
+          console.error("Failed to sync note to server:", note);
           continue;
         }
       }
@@ -184,15 +182,8 @@ const Notes = () => {
   useEffect(() => {
     // Save ALL notes to localStorage for the dashboard to access
     try {
-      if (notes && notes.length > 0) {
-        console.log("Saving", notes.length, "notes to localStorage");
+      if (notes.length > 0) {
         localStorage.setItem("stickyNotes", JSON.stringify(notes));
-      } else if (notes && notes.length === 0) {
-        // Don't clear localStorage if we have no notes but are still loading
-        if (!loading) {
-          console.log("No notes to save, clearing localStorage");
-          localStorage.removeItem("stickyNotes");
-        }
       }
     } catch (error) {
       console.error(
@@ -200,7 +191,7 @@ const Notes = () => {
         error
       );
     }
-  }, [notes, loading]);
+  }, [notes]);
 
   // Inject the handwritten font
   useEffect(() => {
@@ -232,8 +223,7 @@ const Notes = () => {
       const token = localStorage.getItem("token");
       if (!token) throw new Error("No authentication token found");
 
-      console.log("Adding note to server:", newNote);
-      const response = await fetch(API_URL + "/notes", {
+      const response = await fetch(`${API_URL}/notes`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -242,16 +232,9 @@ const Notes = () => {
         body: JSON.stringify(newNote),
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Failed to create note:", response.status, errorText);
-        throw new Error(
-          `Failed to create note: ${response.status} ${errorText}`
-        );
-      }
+      if (!response.ok) throw new Error("Failed to create note");
 
       const savedNote = await response.json();
-      console.log("Note saved successfully:", savedNote);
 
       // Add the new note to the state
       setNotes((prevNotes) => [savedNote, ...prevNotes]);
@@ -298,7 +281,7 @@ const Notes = () => {
       const token = localStorage.getItem("token");
       if (!token) throw new Error("No authentication token found");
 
-      const response = await fetch(API_URL + "/notes/" + id, {
+      const response = await fetch(`${API_URL}/notes/${id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -336,7 +319,7 @@ const Notes = () => {
       const token = localStorage.getItem("token");
       if (!token) throw new Error("No authentication token found");
 
-      const response = await fetch(API_URL + "/notes/" + id, {
+      const response = await fetch(`${API_URL}/notes/${id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -381,7 +364,7 @@ const Notes = () => {
       const token = localStorage.getItem("token");
       if (!token) throw new Error("No authentication token found");
 
-      const response = await fetch(API_URL + "/notes/" + id, {
+      const response = await fetch(`${API_URL}/notes/${id}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,

@@ -32,6 +32,10 @@ import {
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const API_URL = process.env.API_URL || "http://localhost:3000";
+
+// Log the API URL for debugging
+console.log(`API URL: ${API_URL}`);
 
 // Initialize Sequelize with SQLite
 const sequelize = new Sequelize({
@@ -120,7 +124,6 @@ sequelize
   });
 
 // Middleware
-// Middleware
 app.use(
   cors({
     origin:
@@ -129,6 +132,7 @@ app.use(
             "https://task-master-teal-eta.vercel.app",
             "http://localhost:5173",
             "https://task-master-pkmojnn37-stmichael9s-projects.vercel.app",
+            // Add your frontend URL here if it's not already included
           ]
         : "http://localhost:5173",
     credentials: true,
@@ -434,7 +438,16 @@ app.get("/protected-route", requireAuth, (req, res) => {
   res.json({ message: "You're authenticated!" });
 });
 
+// Add a route to expose the API URL to clients
+app.get("/api-config", (req, res) => {
+  res.json({
+    apiUrl: API_URL,
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`API available at ${API_URL}`);
 });
