@@ -132,6 +132,7 @@ app.use(
             "https://task-master-teal-eta.vercel.app",
             "http://localhost:5173",
             "https://task-master-pkmojnn37-stmichael9s-projects.vercel.app",
+            "https://task-master-m333.vercel.app/",
             // Add your frontend URL here if it's not already included
           ]
         : "http://localhost:5173",
@@ -178,7 +179,7 @@ app.post("/refresh-token", async (req, res) => {
         isPremium: decoded.isPremium || false,
       },
       process.env.JWT_SECRET,
-      { expiresIn: "1h" } // Short expiration for security
+      { expiresIn: "24h" } // Short expiration for security
     );
 
     return res.json({ token: newToken });
@@ -442,7 +443,7 @@ app.get("/protected-route", requireAuth, (req, res) => {
 app.get("/api-config", (req, res) => {
   res.json({
     apiUrl: API_URL,
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || "development",
   });
 });
 
