@@ -3,7 +3,7 @@ import { fileURLToPath } from "url";
 import path from "path";
 import jwt from "jsonwebtoken"; // Add this import
 import { Sequelize } from "sequelize";
-
+import fs from "fs";
 // Get the directory name
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -46,6 +46,56 @@ const sequelize = new Sequelize({
       : path.join(__dirname, "database.sqlite"),
   logging: false,
 });
+
+sequelize
+  .authenticate()
+  .then(() => {
+    console.log("Database connection has been established successfully.");
+
+    // Log the database location for debugging
+    console.log(
+      "Database location:",
+      process.env.NODE_ENV === "production"
+        ? "/tmp/database.sqlite"
+        : path.join(__dirname, "database.sqlite")
+    );
+
+    // In production, set up periodic database backups
+    if (process.env.NODE_ENV === "production") {
+      // Create a backup directory if it doesn't exist
+      const backupDir = path.join(__dirname, "backups");
+      try {
+        if (!fs.existsSync(backupDir)) {
+          fs.mkdirSync(backupDir);
+        }
+      } catch (err) {
+        console.error("Error creating backup directory:", err);
+      }
+
+      // Set up a daily backup schedule
+      setInterval(async () => {
+        try {
+          const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+          const backupPath = path.join(backupDir, `backup-${timestamp}.sqlite`);
+
+          // Copy the database file
+          fs.copyFileSync(
+            process.env.NODE_ENV === "production"
+              ? "/tmp/database.sqlite"
+              : path.join(__dirname, "database.sqlite"),
+            backupPath
+          );
+
+          console.log(`Database backed up to ${backupPath}`);
+        } catch (err) {
+          console.error("Database backup failed:", err);
+        }
+      }, 24 * 60 * 60 * 1000); // Once per day
+    }
+  })
+  .catch((err) => {
+    console.error("Unable to connect to the database:", err);
+  });
 
 // Define your Project model
 const Project = sequelize.define("Project", {
@@ -206,15 +256,15 @@ app.post("/refresh-token", async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    return res.json({ 
+    return res.json({
       token: newToken,
       refreshToken: newRefreshToken,
       user: {
         id: decoded.userId,
         username: decoded.username,
         isAdmin: decoded.isAdmin || false,
-        isPremium: decoded.isPremium || false
-      }
+        isPremium: decoded.isPremium || false,
+      },
     });
   } catch (error) {
     console.error("Token refresh error:", error);
@@ -227,7 +277,7 @@ app.get("/verify-token", requireAuth, async (req, res) => {
   try {
     // If we get here, the token is valid (requireAuth middleware passed)
     const userId = req.auth.id;
-    
+
     // Return the user information
     res.json({
       authenticated: true,
@@ -235,14 +285,14 @@ app.get("/verify-token", requireAuth, async (req, res) => {
         id: req.auth.id,
         username: req.auth.username,
         isAdmin: req.auth.isAdmin || false,
-        isPremium: req.auth.isPremium || false
-      }
+        isPremium: req.auth.isPremium || false,
+      },
     });
   } catch (error) {
     console.error("Token verification error:", error);
-    res.status(401).json({ 
+    res.status(401).json({
       authenticated: false,
-      error: "Invalid or expired token" 
+      error: "Invalid or expired token",
     });
   }
 });
@@ -252,10 +302,10 @@ app.post("/login", async (req, res) => {
   try {
     const { username, password } = req.body;
     const result = await loginUser({ username, password });
-    
+
     // Log the user ID for debugging
     console.log(`User logged in with ID: ${result.user.id}`);
-    
+
     res.json(result);
   } catch (error) {
     console.error("Login error:", error);
@@ -328,7 +378,7 @@ app.delete("/tasks/:taskId", requireAuth, async (req, res) => {
   try {
     const taskId = req.params.taskId;
     const userId = req.auth.id;
-    
+
     const result = await deleteTask(taskId, userId);
     res.status(200).json(result);
   } catch (error) {
@@ -491,6 +541,146 @@ app.delete("/notes/:noteId", requireAuth, async (req, res) => {
     }
   } catch (error) {
     console.error("Error deleting note:", error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Backup notes endpoint - allows clients to backup all their notes
+app.post("/notes/backup", requireAuth, async (req, res) => {
+  try {
+    const userId = req.auth.id;
+    const { notes } = req.body;
+
+    if (!Array.isArray(notes)) {
+      return res.status(400).json({ error: "Notes must be an array" });
+    }
+
+    console.log(`Backing up ${notes.length} notes for user ${userId}`);
+
+    // First, get existing notes to avoid duplicates
+    const existingNotes = await Note.findAll({
+      where: { userId },
+      attributes: [
+        "text",
+        "color",
+        "rotation",
+        "pinned",
+        "font",
+        "textColor",
+        "createdAt",
+      ],
+    });
+
+    // Create a map of existing notes by their content signature to avoid duplicates
+    const existingNotesMap = new Map();
+    existingNotes.forEach((note) => {
+      const signature = `${note.text}-${note.color}-${note.font}`;
+      existingNotesMap.set(signature, true);
+    });
+
+    // Filter out duplicates and add userId to each note
+    const notesToCreate = notes
+      .filter((note) => {
+        const signature = `${note.text}-${note.color}-${note.font}`;
+        return !existingNotesMap.has(signature);
+      })
+      .map((note) => ({
+        ...note,
+        userId,
+      }));
+
+    if (notesToCreate.length === 0) {
+      return res.json({ message: "No new notes to backup", count: 0 });
+    }
+
+    // Bulk create the new notes
+    const createdNotes = await Note.bulkCreate(notesToCreate);
+
+    res.status(201).json({
+      message: "Notes backed up successfully",
+      count: createdNotes.length,
+    });
+  } catch (error) {
+    console.error("Error backing up notes:", error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Restore notes from a specific date
+app.get("/notes/restore", requireAuth, async (req, res) => {
+  try {
+    const userId = req.auth.id;
+    const { since } = req.query;
+
+    let whereClause = { userId };
+
+    // If 'since' parameter is provided, only get notes created after that date
+    if (since) {
+      whereClause.createdAt = {
+        [Sequelize.Op.gte]: new Date(since),
+      };
+    }
+
+    const notes = await Note.findAll({
+      where: whereClause,
+      order: [["createdAt", "DESC"]],
+    });
+
+    res.json({
+      message: "Notes retrieved successfully",
+      count: notes.length,
+      notes,
+    });
+  } catch (error) {
+    console.error("Error restoring notes:", error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Add a similar backup system for tasks
+app.post("/tasks/backup", requireAuth, async (req, res) => {
+  try {
+    const userId = req.auth.id;
+    const { tasks } = req.body;
+
+    if (!Array.isArray(tasks)) {
+      return res.status(400).json({ error: "Tasks must be an array" });
+    }
+
+    console.log(`Backing up ${tasks.length} tasks for user ${userId}`);
+
+    // Process each task - this will need to be adapted to your Task model structure
+    const results = [];
+    for (const task of tasks) {
+      // Add userId to the task
+      const taskWithUserId = { ...task, userId };
+
+      // Check if task already exists (by title or some unique identifier)
+      // This depends on your Task model structure
+      const existingTask = await sequelize.models.Task.findOne({
+        where: {
+          title: task.title,
+          userId,
+        },
+      });
+
+      if (!existingTask) {
+        // Create new task if it doesn't exist
+        const newTask = await sequelize.models.Task.create(taskWithUserId);
+        results.push({ status: "created", id: newTask.id });
+      } else {
+        // Update existing task
+        await existingTask.update(taskWithUserId);
+        results.push({ status: "updated", id: existingTask.id });
+      }
+    }
+
+    res.status(201).json({
+      message: "Tasks backed up successfully",
+      results,
+    });
+  } catch (error) {
+    console.error("Error backing up tasks:", error);
     res.status(400).json({ error: error.message });
   }
 });

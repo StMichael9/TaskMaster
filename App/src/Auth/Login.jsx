@@ -44,8 +44,9 @@ const Login = () => {
         throw new Error(data.error || data.message || "Login failed");
       }
 
-      // Store token and user data in localStorage
+      // Store token, refresh token, and user data in localStorage
       localStorage.setItem("token", data.token);
+      localStorage.setItem("refreshToken", data.refreshToken); // Add this line
       localStorage.setItem(
         "userInfo",
         JSON.stringify({

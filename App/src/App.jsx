@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import ToDo from "./ToDo";
 import Navbar from "./Navbar";
 import "./App.css";
@@ -11,6 +12,41 @@ import Settings from "./Settings";
 import { SettingsProvider } from "./contexts/SettingsContext";
 
 function App() {
+  useEffect(() => {
+    // Try to refresh the token when the app starts
+    const tryRefreshToken = async () => {
+      try {
+        const refreshToken = localStorage.getItem("refreshToken");
+        if (!refreshToken) return;
+
+        const API_URL = "https://taskmaster-1-wf5e.onrender.com";
+        const response = await fetch(`${API_URL}/refresh-token`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ refreshToken }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          localStorage.setItem("token", data.token);
+          localStorage.setItem("refreshToken", data.refreshToken);
+
+          if (data.user) {
+            localStorage.setItem("userInfo", JSON.stringify(data.user));
+          }
+
+          console.log("Token refreshed successfully on app start");
+        }
+      } catch (error) {
+        console.error("Failed to refresh token on app start:", error);
+      }
+    };
+
+    tryRefreshToken();
+  }, []);
+
   return (
     <SettingsProvider>
       <BrowserRouter>

@@ -6,7 +6,7 @@ const Notes = () => {
   const [notes, setNotes] = useState([]);
   const [newNoteText, setNewNoteText] = useState("");
   const [newNoteColor, setNewNoteColor] = useState("#f8e16c");
-  const [newNoteFont, setNewNoteFont] = useState("Caveat"); // Default font
+  const [newNoteFont, setNewNoteFont] = useState("'Caveat', cursive"); // Default font with proper format
   const [newNoteTextColor, setNewNoteTextColor] = useState("#000000"); // Default text color
   const [animatingNoteId, setAnimatingNoteId] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -15,13 +15,13 @@ const Notes = () => {
   const gridRef = useRef(null);
   const fontDropdownRef = useRef(null);
 
-  // Available fonts
+  // Available fonts with proper CSS font-family format
   const fontOptions = [
-    { name: "Handwritten", value: "Caveat" },
-    { name: "Sans Serif", value: "Arial, sans-serif" },
-    { name: "Serif", value: "Georgia, serif" },
-    { name: "Monospace", value: "Courier New, monospace" },
-    { name: "Cursive", value: "Brush Script MT, cursive" },
+    { name: "Handwritten", value: "'Caveat', cursive" },
+    { name: "Sans Serif", value: "'Arial', sans-serif" },
+    { name: "Serif", value: "'Georgia', serif" },
+    { name: "Monospace", value: "'Courier New', monospace" },
+    { name: "Cursive", value: "'Brush Script MT', cursive" },
   ];
 
   // Available text colors
@@ -52,8 +52,33 @@ const Notes = () => {
     };
   }, []);
 
+  // Inject all required fonts
+  useEffect(() => {
+    // Create link elements for each font we want to use
+    const fontLinks = [
+      "https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600&display=swap",
+      // Add other Google Fonts if needed
+    ];
+    
+    const linkElements = fontLinks.map(href => {
+      const link = document.createElement("link");
+      link.href = href;
+      link.rel = "stylesheet";
+      document.head.appendChild(link);
+      return link;
+    });
+    
+    // Cleanup function to remove links when component unmounts
+    return () => {
+      linkElements.forEach(link => {
+        if (document.head.contains(link)) {
+          document.head.removeChild(link);
+        }
+      });
+    };
+  }, []);
+
   // Fetch notes from the server
-  // First, extract fetchNotes to be a standalone function outside of useEffect
   const fetchNotes = async () => {
     setLoading(true);
     try {
@@ -233,18 +258,6 @@ const Notes = () => {
     }
   }, [notes]);
 
-  // Inject the handwritten font
-  useEffect(() => {
-    const link = document.createElement("link");
-    link.href =
-      "https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600&display=swap";
-    link.rel = "stylesheet";
-    document.head.appendChild(link);
-    return () => {
-      document.head.removeChild(link);
-    };
-  }, []);
-
   // Add a note to the server
   const addNote = async () => {
     if (newNoteText.trim() === "") return;
@@ -338,6 +351,11 @@ const Notes = () => {
     } catch (err) {
       console.error("Error updating note:", err);
       setError(err.message);
+
+      // Revert the change if the API call fails
+      setNotes(
+        notes.map((n) => (n.id === id ? { ...n, text: note.text, ...updates } : n))
+      );
     }
   };
 
