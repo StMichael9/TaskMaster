@@ -84,7 +84,20 @@ const Notes = () => {
     try {
       const token = localStorage.getItem("token");
       if (!token) {
-        // If not authenticated, show empty notes list
+        // If not authenticated, try to load from localStorage
+        const userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}");
+        const userId = userInfo?.id;
+        
+        if (userId) {
+          const cachedNotes = localStorage.getItem(`notes_${userId}`);
+          if (cachedNotes) {
+            setNotes(JSON.parse(cachedNotes));
+            setLoading(false);
+            return;
+          }
+        }
+        
+        // If no cached notes, show empty list
         setNotes([]);
         setLoading(false);
         return;
@@ -99,6 +112,20 @@ const Notes = () => {
       if (response.status === 401) {
         // Token expired or invalid
         localStorage.removeItem("token"); // Clear the invalid token
+        
+        // Try to load from localStorage
+        const userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}");
+        const userId = userInfo?.id;
+        
+        if (userId) {
+          const cachedNotes = localStorage.getItem(`notes_${userId}`);
+          if (cachedNotes) {
+            setNotes(JSON.parse(cachedNotes));
+            setLoading(false);
+            return;
+          }
+        }
+        
         throw new Error("Your session has expired. Please log in again.");
       }
 
@@ -108,6 +135,13 @@ const Notes = () => {
 
       const data = await response.json();
       setNotes(data);
+      
+      // Cache the notes in localStorage
+      const userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}");
+      const userId = userInfo?.id;
+      if (userId) {
+        localStorage.setItem(`notes_${userId}`, JSON.stringify(data));
+      }
     } catch (err) {
       console.error("Error fetching notes:", err);
       setError(err.message);
@@ -119,9 +153,6 @@ const Notes = () => {
           window.location.href = "/login";
         }, 2000);
       }
-
-      // Clear notes on error - don't load from localStorage
-      setNotes([]);
     } finally {
       setLoading(false);
     }
