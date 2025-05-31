@@ -11,7 +11,9 @@ const Notes = () => {
   const [animatingNoteId, setAnimatingNoteId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showFontDropdown, setShowFontDropdown] = useState(false);
   const gridRef = useRef(null);
+  const fontDropdownRef = useRef(null);
 
   // Available fonts
   const fontOptions = [
@@ -35,6 +37,20 @@ const Notes = () => {
 
   // Add this line to get the API URL from environment variables
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+
+  // Close font dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (fontDropdownRef.current && !fontDropdownRef.current.contains(event.target)) {
+        setShowFontDropdown(false);
+      }
+    }
+    
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   // Fetch notes from the server
   // First, extract fetchNotes to be a standalone function outside of useEffect
@@ -501,20 +517,37 @@ const Notes = () => {
         </div>
 
         {/* Font Picker */}
-        <div className="font-picker mb-4">
-          {fontOptions.map((font) => (
-            <button
-              key={font.value}
-              onClick={() => setNewNoteFont(font.value)}
-              className={`font-option ${
-                newNoteFont === font.value ? "selected" : ""
-              }`}
-              style={{ fontFamily: font.value }}
-              aria-label={`Select ${font.name} font`}
-            >
-              {font.name}
-            </button>
-          ))}
+        <div className="font-picker mb-4 relative">
+          <button
+            onClick={() => setShowFontDropdown(!showFontDropdown)}
+            className={`font-option ${
+              showFontDropdown ? "selected" : ""
+            }`}
+            style={{ fontFamily: newNoteFont }}
+            aria-label={`Select ${newNoteFont} font`}
+          >
+            {fontOptions.find(font => font.value === newNoteFont)?.name || "Select Font"}
+          </button>
+          {showFontDropdown && (
+            <div className="absolute top-full left-0 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 shadow-md z-10" ref={fontDropdownRef}>
+              {fontOptions.map((font) => (
+                <button
+                  key={font.value}
+                  onClick={() => {
+                    setNewNoteFont(font.value);
+                    setShowFontDropdown(false);
+                  }}
+                  className={`font-option block w-full px-4 py-2 text-left ${
+                    newNoteFont === font.value ? "bg-gray-100 dark:bg-gray-700" : ""
+                  }`}
+                  style={{ fontFamily: font.value }}
+                  aria-label={`Select ${font.name} font`}
+                >
+                  {font.name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Text Color Picker */}
