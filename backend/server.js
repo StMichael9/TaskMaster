@@ -103,6 +103,14 @@ const Note = sequelize.define("Note", {
     type: Sequelize.INTEGER,
     allowNull: false,
   },
+  font: {
+    type: Sequelize.STRING,
+    defaultValue: "Caveat",
+  },
+  textColor: {
+    type: Sequelize.STRING,
+    defaultValue: "#000000",
+  },
   createdAt: {
     type: Sequelize.DATE,
     defaultValue: Sequelize.NOW,
@@ -153,7 +161,7 @@ app.get("/", (req, res) => {
   });
 });
 
-// Token refresh endpoint
+// Token refresh endpoint - UPDATED
 app.post("/refresh-token", async (req, res) => {
   try {
     const { refreshToken } = req.body;
@@ -170,7 +178,10 @@ app.post("/refresh-token", async (req, res) => {
       return res.status(401).json({ error: "Invalid refresh token" });
     }
 
-    // Generate a new access token
+    // Log the user ID from the refresh token for debugging
+    console.log(`Refreshing token for user ID: ${decoded.userId}`);
+
+    // Generate a new access token with the SAME user ID
     const newToken = jwt.sign(
       {
         id: decoded.userId,
@@ -179,23 +190,75 @@ app.post("/refresh-token", async (req, res) => {
         isPremium: decoded.isPremium || false,
       },
       process.env.JWT_SECRET,
-      { expiresIn: "24h" } // Short expiration for security
+      { expiresIn: "24h" }
     );
 
-    return res.json({ token: newToken });
+    // Also generate a new refresh token to extend the session
+    const newRefreshToken = jwt.sign(
+      {
+        userId: decoded.userId,
+        username: decoded.username,
+        type: "refresh",
+        isAdmin: decoded.isAdmin || false,
+        isPremium: decoded.isPremium || false,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    return res.json({ 
+      token: newToken,
+      refreshToken: newRefreshToken,
+      user: {
+        id: decoded.userId,
+        username: decoded.username,
+        isAdmin: decoded.isAdmin || false,
+        isPremium: decoded.isPremium || false
+      }
+    });
   } catch (error) {
     console.error("Token refresh error:", error);
     return res.status(401).json({ error: "Invalid or expired refresh token" });
   }
 });
 
-// User authentication routes
+// NEW: Add token verification endpoint
+app.get("/verify-token", requireAuth, async (req, res) => {
+  try {
+    // If we get here, the token is valid (requireAuth middleware passed)
+    const userId = req.auth.id;
+    
+    // Return the user information
+    res.json({
+      authenticated: true,
+      user: {
+        id: req.auth.id,
+        username: req.auth.username,
+        isAdmin: req.auth.isAdmin || false,
+        isPremium: req.auth.isPremium || false
+      }
+    });
+  } catch (error) {
+    console.error("Token verification error:", error);
+    res.status(401).json({ 
+      authenticated: false,
+      error: "Invalid or expired token" 
+    });
+  }
+});
+
+// User authentication routes - UPDATED
 app.post("/login", async (req, res) => {
   try {
     const { username, password } = req.body;
     const result = await loginUser({ username, password });
+    
+    // Log the user ID for debugging
+    console.log(`User logged in with ID: ${result.user.id}`);
+    
     res.json(result);
   } catch (error) {
+    console.error("Login error:", error);
     res.status(401).json({ error: error.message });
   }
 });
@@ -265,7 +328,7 @@ app.delete("/tasks/:taskId", requireAuth, async (req, res) => {
   try {
     const taskId = req.params.taskId;
     const userId = req.auth.id;
-
+    
     const result = await deleteTask(taskId, userId);
     res.status(200).json(result);
   } catch (error) {
