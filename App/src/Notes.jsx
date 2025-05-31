@@ -6,10 +6,32 @@ const Notes = () => {
   const [notes, setNotes] = useState([]);
   const [newNoteText, setNewNoteText] = useState("");
   const [newNoteColor, setNewNoteColor] = useState("#f8e16c");
+  const [newNoteFont, setNewNoteFont] = useState("Caveat"); // Default font
+  const [newNoteTextColor, setNewNoteTextColor] = useState("#000000"); // Default text color
   const [animatingNoteId, setAnimatingNoteId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const gridRef = useRef(null);
+
+  // Available fonts
+  const fontOptions = [
+    { name: "Handwritten", value: "Caveat" },
+    { name: "Sans Serif", value: "Arial, sans-serif" },
+    { name: "Serif", value: "Georgia, serif" },
+    { name: "Monospace", value: "Courier New, monospace" },
+    { name: "Cursive", value: "Brush Script MT, cursive" },
+  ];
+
+  // Available text colors
+  const textColors = [
+    "#000000", // Black
+    "#1e40af", // Dark Blue
+    "#047857", // Dark Green
+    "#7c2d12", // Dark Brown
+    "#7e22ce", // Purple
+    "#be123c", // Dark Red
+    "#334155", // Slate
+  ];
 
   // Add this line to get the API URL from environment variables
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
@@ -96,6 +118,7 @@ const Notes = () => {
       window.removeEventListener("storage", handleStorageChange);
     };
   }, []);
+  
   // Add this function to sync local notes with the server
   const syncLocalNotesToServer = async () => {
     try {
@@ -178,6 +201,7 @@ const Notes = () => {
       console.error("Error saving notes to localStorage:", error);
     }
   }, [notes]);
+  
   // Add this useEffect right after your existing useEffect for saving local-only notes
   useEffect(() => {
     // Save ALL notes to localStorage for the dashboard to access
@@ -214,6 +238,8 @@ const Notes = () => {
     const newNote = {
       text: newNoteText,
       color: newNoteColor,
+      textColor: newNoteTextColor,
+      font: newNoteFont,
       rotation: rotation,
       pinned: false,
       createdAt: new Date().toISOString(),
@@ -267,10 +293,12 @@ const Notes = () => {
   };
 
   // Update a note on the server
-  const updateNoteText = async (id, newText) => {
+  const updateNoteText = async (id, newText, updates = {}) => {
     // First update locally for immediate feedback
     setNotes(
-      notes.map((note) => (note.id === id ? { ...note, text: newText } : note))
+      notes.map((note) => 
+        note.id === id ? { ...note, text: newText, ...updates } : note
+      )
     );
 
     // Check if this is a local-only note
@@ -287,13 +315,29 @@ const Notes = () => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ text: newText }),
+        body: JSON.stringify({ text: newText, ...updates }),
       });
 
       if (!response.ok) throw new Error("Failed to update note");
     } catch (err) {
       console.error("Error updating note:", err);
       setError(err.message);
+    }
+  };
+
+  // Update note font
+  const updateNoteFont = async (id, font) => {
+    const note = notes.find(n => n.id === id);
+    if (note) {
+      updateNoteText(id, note.text, { font });
+    }
+  };
+
+  // Update note text color
+  const updateNoteTextColor = async (id, textColor) => {
+    const note = notes.find(n => n.id === id);
+    if (note) {
+      updateNoteText(id, note.text, { textColor });
     }
   };
 
@@ -456,6 +500,38 @@ const Notes = () => {
           ))}
         </div>
 
+        {/* Font Picker */}
+        <div className="font-picker mb-4">
+          {fontOptions.map((font) => (
+            <button
+              key={font.value}
+              onClick={() => setNewNoteFont(font.value)}
+              className={`font-option ${
+                newNoteFont === font.value ? "selected" : ""
+              }`}
+              style={{ fontFamily: font.value }}
+              aria-label={`Select ${font.name} font`}
+            >
+              {font.name}
+            </button>
+          ))}
+        </div>
+
+        {/* Text Color Picker */}
+        <div className="text-color-picker mb-4">
+          {textColors.map((color) => (
+            <button
+              key={color}
+              onClick={() => setNewNoteTextColor(color)}
+              className={`text-color-option ${
+                newNoteTextColor === color ? "selected" : ""
+              }`}
+              style={{ backgroundColor: color, color: color === "#000000" ? "#ffffff" : "#000000" }}
+              aria-label={`Select ${color} text color`}
+            ></button>
+          ))}
+        </div>
+
         <button onClick={addNote} className="add-note-button">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -510,6 +586,8 @@ const Notes = () => {
                   "--rotation": `${note.rotation}deg`,
                   transform: `rotate(${note.rotation}deg)`,
                   animationDelay: `${index * 0.05}s`,
+                  fontFamily: note.font,
+                  color: note.textColor,
                 }}
               >
                 {attachment.includes("pin") ? (

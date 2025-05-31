@@ -725,24 +725,24 @@ const ToDo = () => {
       </div>
 
       {isAddingTask ? (
-        <div className="task-form mb-4 bg-white dark:bg-gray-700 p-3 rounded-lg shadow-sm">
-          <div className="mb-2">
+        <div className="task-form mb-4 bg-white dark:bg-gray-700 p-4 rounded-lg shadow-sm">
+          <div className="mb-3">
             <input
               ref={newTaskInputRef}
               type="text"
               value={newTask}
               onChange={(e) => setNewTask(e.target.value)}
               placeholder="What needs to be done?"
-              className="w-full p-2 border rounded dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+              className="w-full p-3 border rounded dark:bg-gray-800 dark:border-gray-600 dark:text-white text-base"
               onKeyDown={(e) => e.key === "Enter" && addTask()}
             />
           </div>
 
-          <div className="flex flex-wrap gap-2 mb-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
             <select
               value={priority}
               onChange={(e) => setPriority(e.target.value)}
-              className="text-sm px-2 py-1 rounded bg-gray-200 dark:bg-gray-700 dark:text-white"
+              className="text-base px-3 py-2 rounded bg-gray-200 dark:bg-gray-700 dark:text-white"
             >
               <option value="low">Low Priority</option>
               <option value="medium">Medium Priority</option>
@@ -752,7 +752,7 @@ const ToDo = () => {
             <select
               value={taskCategory}
               onChange={(e) => setTaskCategory(e.target.value)}
-              className="text-sm px-2 py-1 rounded bg-gray-200 dark:bg-gray-700 dark:text-white"
+              className="text-base px-3 py-2 rounded bg-gray-200 dark:bg-gray-700 dark:text-white"
             >
               {categoryOptions.map((category) => (
                 <option key={category.value} value={category.value}>
@@ -765,7 +765,7 @@ const ToDo = () => {
               type="datetime-local"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
-              className="text-sm px-2 py-1 rounded bg-gray-200 dark:bg-gray-700 dark:text-white"
+              className="text-base px-3 py-2 rounded bg-gray-200 dark:bg-gray-700 dark:text-white col-span-1 sm:col-span-2"
             />
           </div>
 
@@ -775,13 +775,13 @@ const ToDo = () => {
                 setIsAddingTask(false);
                 setNewTask("");
               }}
-              className="px-3 py-1 text-sm rounded bg-gray-200 dark:bg-gray-600 dark:text-white"
+              className="px-4 py-2 text-base rounded bg-gray-200 dark:bg-gray-600 dark:text-white"
             >
               Cancel
             </button>
             <button
               onClick={addTask}
-              className="px-3 py-1 text-sm rounded text-white"
+              className="px-4 py-2 text-base rounded text-white"
               style={{ backgroundColor: accentColor }}
               disabled={!newTask.trim()}
             >
@@ -792,7 +792,7 @@ const ToDo = () => {
       ) : (
         <button
           onClick={() => setIsAddingTask(true)}
-          className="w-full mb-4 p-2 text-center rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-500 transition-colors"
+          className="w-full mb-4 p-3 text-center rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-500 transition-colors text-base"
         >
           + Add New Task
         </button>
@@ -1048,8 +1048,8 @@ const ToDo = () => {
 
       {/* Edit Task Modal */}
       {editingTask && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-4 w-full max-w-md mx-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-4 w-full max-w-md mx-auto">
             <h3 className="text-lg font-medium mb-4 dark:text-white">
               Edit Task
             </h3>
@@ -1061,16 +1061,16 @@ const ToDo = () => {
                 value={editText}
                 onChange={(e) => setEditText(e.target.value)}
                 placeholder="Task description"
-                className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                className="w-full p-3 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white text-base"
                 onKeyDown={(e) => e.key === "Enter" && saveEditTask()}
               />
             </div>
 
-            <div className="flex flex-wrap gap-2 mb-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
               <select
                 value={editPriority}
                 onChange={(e) => setEditPriority(e.target.value)}
-                className="text-sm px-2 py-1 rounded bg-gray-200 dark:bg-gray-700 dark:text-white"
+                className="text-base px-3 py-2 rounded bg-gray-200 dark:bg-gray-700 dark:text-white"
               >
                 <option value="low">Low Priority</option>
                 <option value="medium">Medium Priority</option>
@@ -1080,7 +1080,7 @@ const ToDo = () => {
               <select
                 value={editCategory}
                 onChange={(e) => setEditCategory(e.target.value)}
-                className="text-sm px-2 py-1 rounded bg-gray-200 dark:bg-gray-700 dark:text-white"
+                className="text-base px-3 py-2 rounded bg-gray-200 dark:bg-gray-700 dark:text-white"
               >
                 {categoryOptions.map((category) => (
                   <option key={category.value} value={category.value}>
@@ -1093,20 +1093,20 @@ const ToDo = () => {
                 type="datetime-local"
                 value={editDueDate}
                 onChange={(e) => setEditDueDate(e.target.value)}
-                className="text-sm px-2 py-1 rounded bg-gray-200 dark:bg-gray-700 dark:text-white"
+                className="text-base px-3 py-2 rounded bg-gray-200 dark:bg-gray-700 dark:text-white col-span-1 sm:col-span-2"
               />
             </div>
 
             <div className="flex justify-end gap-2">
               <button
                 onClick={cancelEditTask}
-                className="px-3 py-1 text-sm rounded bg-gray-200 dark:bg-gray-600 dark:text-white"
+                className="px-4 py-2 text-base rounded bg-gray-200 dark:bg-gray-600 dark:text-white"
               >
                 Cancel
               </button>
               <button
                 onClick={saveEditTask}
-                className="px-3 py-1 text-sm rounded text-white"
+                className="px-4 py-2 text-base rounded text-white"
                 style={{ backgroundColor: accentColor }}
                 disabled={!editText.trim()}
               >
