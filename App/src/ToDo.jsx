@@ -580,10 +580,12 @@ const ToDo = () => {
     { value: "personal", label: "Personal", icon: "👤" },
     { value: "work", label: "Work", icon: "💼" },
     { value: "shopping", label: "Shopping", icon: "🛒" },
+    { value: "school", label: "School", icon: "🎓" },
     { value: "health", label: "Health", icon: "❤️" },
     { value: "education", label: "Education", icon: "📚" },
     { value: "finance", label: "Finance", icon: "💰" },
   ];
+  d;
 
   // Get category icon
   const getCategoryIcon = (categoryValue) => {

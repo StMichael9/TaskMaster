@@ -1,20 +1,29 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import AIAssistant from "./components/AIAssistant.jsx";
+import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 
 const Projects = () => {
   const [projects, setProjects] = useState([]);
-  const [newProjects, setNewProjects] = useState("");
+  const [newProjectName, setNewProjectName] = useState("");
   const [editingProject, setEditingProject] = useState(null);
   const [dueDate, setDueDate] = useState("");
-  const [priority, setPriority] = useState("normal"); // 'normal', 'high', 'urgent'
+  const [priority, setPriority] = useState("normal");
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [accentColor, setAccentColor] = useState(() => {
-    return localStorage.getItem("accentColor") || "#4F46E5"; // Use user's accent color if available
+    return localStorage.getItem("accentColor") || "#4F46E5";
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [userId, setUserId] = useState(null);
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [filterPriority, setFilterPriority] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isAddingProject, setIsAddingProject] = useState(false);
+  
+  const navigate = useNavigate();
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+
   // Load user ID and projects when component mounts
   useEffect(() => {
     // Get user ID from localStorage
@@ -22,17 +31,25 @@ const Projects = () => {
       const userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}");
       if (userInfo.id) {
         setUserId(userInfo.id);
+      } else {
+        // If no user ID, redirect to login
+        navigate("/login");
       }
     } catch (error) {
       console.error("Error parsing user info:", error);
     }
 
     fetchProjects();
-  }, []);
+    
+    // Check for dark mode
+    const isDarkMode = localStorage.getItem("darkMode") === "true";
+    if (isDarkMode) {
+      document.documentElement.classList.add("dark");
+    }
+  }, [navigate]);
 
-  // Update the fetchProjects function to use userId
-  // Update the fetchProjects function
-  const fetchProjects = async () => {
+  // Fetch projects from API or localStorage
+  const fetchProjects = useCallback(async () => {
     setLoading(true);
     setError(null);
 
@@ -56,10 +73,8 @@ const Projects = () => {
         }
         
         setLoading(false);
-        return; // Exit early if no token
+        return;
       }
-
-      console.log("Using token:", token.substring(0, 10) + "..."); // Debug the token being sent
 
       const response = await fetch(`${API_URL}/projects`, {
         headers: {
@@ -70,12 +85,10 @@ const Projects = () => {
 
       if (!response.ok) {
         if (response.status === 401) {
-          // If unauthorized, clear the token
           localStorage.removeItem("token");
           setError("Your session has expired. Please log in again.");
-          throw new Error(
-            "Authentication failed - token may be invalid or expired"
-          );
+          navigate("/login");
+          throw new Error("Authentication failed - token may be invalid or expired");
         }
 
         const errorText = await response.text();
@@ -89,8 +102,6 @@ const Projects = () => {
       // Cache projects in localStorage with user-specific key
       if (userId) {
         localStorage.setItem(`projects_${userId}`, JSON.stringify(data));
-      } else {
-        localStorage.setItem("projects", JSON.stringify(data)); // Fallback without userId
       }
     } catch (error) {
       console.error("Error fetching projects:", error);
@@ -100,22 +111,14 @@ const Projects = () => {
         const userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}");
         const userId = userInfo?.id;
         
-        // Try user-specific cache first
-        let cachedProjects;
         if (userId) {
-          cachedProjects = localStorage.getItem(`projects_${userId}`);
-        }
-        
-        // Fall back to generic cache if needed
-        if (!cachedProjects) {
-          cachedProjects = localStorage.getItem("projects");
-        }
-        
-        if (cachedProjects) {
-          setProjects(JSON.parse(cachedProjects));
-          setError("Using cached projects. Please refresh or log in again.");
-        } else {
-          setError("Failed to load projects. Please log in and try again.");
+          const cachedProjects = localStorage.getItem(`projects_${userId}`);
+          if (cachedProjects) {
+            setProjects(JSON.parse(cachedProjects));
+            setError("Using cached projects. Please refresh or log in again.");
+          } else {
+            setError("Failed to load projects. Please log in and try again.");
+          }
         }
       } catch (e) {
         console.error("Error loading projects from localStorage:", e);
@@ -124,154 +127,125 @@ const Projects = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [API_URL, navigate]);
 
-  // Also update the saveProject function
-  const saveProject = async (projectData) => {
+  // Handle creating or updating a project
+  const handleSaveProject = async (e) => {
+    e.preventDefault();
+    
+    if (!newProjectName.trim()) {
+      setError("Project name cannot be empty");
+      return;
+    }
+
     try {
       const token = localStorage.getItem("token");
+      const userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}");
+      const userId = userInfo?.id;
+      
       if (!token) {
         throw new Error("Authentication required");
+        navigate("/login");
       }
 
-      // Change the port from 3000 to 5000
-      const response = await fetch(`${API_URL}/projects`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(projectData),
-      });
+      if (editingProject) {
+        // Update existing project
+        const updatedProject = {
+          ...editingProject,
+          name: newProjectName,
+          priority: priority,
+          dueDate: dueDate || null,
+        };
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error("Server error:", errorData);
-        throw new Error("Failed to create project");
-      }
+        // Optimistic update
+        setProjects(
+          projects.map((project) =>
+            project.id === editingProject.id ? updatedProject : project
+          )
+        );
 
-      const newProject = await response.json();
-      return newProject;
-    } catch (error) {
-      console.error("Error saving project:", error);
-      throw error;
-    }
-  };
-
-  const handleNewProject = async () => {
-    if (newProjects.trim()) {
-      try {
-        const token = localStorage.getItem("token");
-        const userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}");
-        const userId = userInfo?.id;
-        
-        if (!token) {
-          throw new Error("Authentication required");
-        }
-
-        if (editingProject) {
-          // Update existing project
-          const updatedProject = {
-            ...editingProject,
-            name: newProjects,
-            priority: priority,
-            dueDate: dueDate,
-          };
-
-          // Optimistic update
-          setProjects(
-            projects.map((project) =>
-              project.id === editingProject.id ? updatedProject : project
-            )
-          );
-
-          // API update
-          const response = await fetch(
-            `${API_URL}/projects/${editingProject.id}`,
-            {
-              method: "PUT",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-              },
-              body: JSON.stringify(updatedProject),
-            }
-          );
-
-          if (!response.ok) {
-            throw new Error("Failed to update project");
-          }
-
-          // Update with server response
-          const data = await response.json();
-          const updatedProjects = projects.map((project) =>
-            project.id === editingProject.id ? data : project
-          );
-          setProjects(updatedProjects);
-
-          // Update localStorage with user-specific key
-          if (userId) {
-            localStorage.setItem(`projects_${userId}`, JSON.stringify(updatedProjects));
-          } else {
-            localStorage.setItem("projects", JSON.stringify(updatedProjects));
-          }
-
-          setEditingProject(null);
-        } else {
-          // Create new project
-          const newProject = {
-            name: newProjects,
-            tasks: [],
-            completed: false,
-            createdAt: new Date().toISOString(),
-            dueDate: dueDate,
-            priority: priority,
-            userId: userId, // Add userId to the project
-          };
-
-          // API create
-          const response = await fetch(`${API_URL}/projects`, {
-            method: "POST",
+        // API update
+        const response = await fetch(
+          `${API_URL}/projects/${editingProject.id}`,
+          {
+            method: "PUT",
             headers: {
               "Content-Type": "application/json",
               Authorization: `Bearer ${token}`,
             },
-            body: JSON.stringify(newProject),
-          });
-
-          if (!response.ok) {
-            throw new Error("Failed to create project");
+            body: JSON.stringify(updatedProject),
           }
+        );
 
-          // Add server response (with ID) to state
-          const data = await response.json();
-          const updatedProjects = [...projects, data];
-          setProjects(updatedProjects);
-          
-          // Update localStorage with user-specific key
-          if (userId) {
-            localStorage.setItem(`projects_${userId}`, JSON.stringify(updatedProjects));
-          } else {
-            localStorage.setItem("projects", JSON.stringify(updatedProjects));
-          }
+        if (!response.ok) {
+          throw new Error("Failed to update project");
         }
 
-        // Reset form
-        setNewProjects("");
-        setDueDate("");
-        setPriority("normal");
-      } catch (error) {
-        console.error("Error saving project:", error);
-        setError("Failed to save project. Please try again.");
+        // Update with server response
+        const data = await response.json();
+        const updatedProjects = projects.map((project) =>
+          project.id === editingProject.id ? data : project
+        );
+        setProjects(updatedProjects);
 
-        // If we were editing, revert the optimistic update
-        if (editingProject) {
-          fetchProjects(); // Refresh from server
+        // Update localStorage with user-specific key
+        if (userId) {
+          localStorage.setItem(`projects_${userId}`, JSON.stringify(updatedProjects));
         }
+      } else {
+        // Create new project
+        const newProject = {
+          name: newProjectName,
+          completed: false,
+          dueDate: dueDate || null,
+          priority: priority,
+          userId: userId,
+        };
+
+        // API create
+        const response = await fetch(`${API_URL}/projects`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(newProject),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to create project");
+        }
+
+        // Add server response (with ID) to state
+        const data = await response.json();
+        const updatedProjects = [...projects, data];
+        setProjects(updatedProjects);
+        
+        // Update localStorage with user-specific key
+        if (userId) {
+          localStorage.setItem(`projects_${userId}`, JSON.stringify(updatedProjects));
+        }
+      }
+
+      // Reset form
+      setNewProjectName("");
+      setDueDate("");
+      setPriority("normal");
+      setEditingProject(null);
+      setIsAddingProject(false);
+      setError(null);
+    } catch (error) {
+      console.error("Error saving project:", error);
+      setError("Failed to save project. Please try again.");
+
+      // If we were editing, revert the optimistic update
+      if (editingProject) {
+        fetchProjects(); // Refresh from server
       }
     }
   };
 
+  // Delete a project
   const deleteProject = async (projectId) => {
     try {
       const token = localStorage.getItem("token");
@@ -280,6 +254,7 @@ const Projects = () => {
       
       if (!token) {
         throw new Error("Authentication required");
+        navigate("/login");
       }
 
       // Optimistic delete
@@ -301,8 +276,6 @@ const Projects = () => {
       // Update localStorage with user-specific key
       if (userId) {
         localStorage.setItem(`projects_${userId}`, JSON.stringify(updatedProjects));
-      } else {
-        localStorage.setItem("projects", JSON.stringify(updatedProjects));
       }
     } catch (error) {
       console.error("Error deleting project:", error);
@@ -311,13 +284,16 @@ const Projects = () => {
     }
   };
 
+  // Edit a project
   const editProject = (project) => {
     setEditingProject(project);
-    setNewProjects(project.name); // Set the input value to the project name
+    setNewProjectName(project.name);
     setPriority(project.priority || "normal");
-    setDueDate(project.dueDate || "");
+    setDueDate(project.dueDate ? new Date(project.dueDate).toISOString().split('T')[0] : "");
+    setIsAddingProject(true);
   };
 
+  // Toggle project completion status
   const toggleProjectCompletion = async (projectId) => {
     try {
       const token = localStorage.getItem("token");
@@ -326,6 +302,7 @@ const Projects = () => {
       
       if (!token) {
         throw new Error("Authentication required");
+        navigate("/login");
       }
 
       // Find the project to toggle
@@ -363,8 +340,6 @@ const Projects = () => {
       // Update localStorage with user-specific key
       if (userId) {
         localStorage.setItem(`projects_${userId}`, JSON.stringify(updatedProjects));
-      } else {
-        localStorage.setItem("projects", JSON.stringify(updatedProjects));
       }
     } catch (error) {
       console.error("Error toggling project completion:", error);
@@ -372,6 +347,26 @@ const Projects = () => {
       fetchProjects(); // Refresh from server to revert optimistic update
     }
   };
+
+  // Filter projects based on search, completion status, and priority
+  const filteredProjects = projects.filter((project) => {
+    // Filter by completion status
+    if (showCompleted === false && project.completed === true) {
+      return false;
+    }
+    
+    // Filter by priority
+    if (filterPriority !== "all" && project.priority !== filterPriority) {
+      return false;
+    }
+    
+    // Filter by search query
+    if (searchQuery && !project.name.toLowerCase().includes(searchQuery.toLowerCase())) {
+      return false;
+    }
+    
+    return true;
+  });
 
   // Helper function to get priority badge color
   const getPriorityBadgeClass = (priorityLevel) => {
@@ -403,10 +398,10 @@ const Projects = () => {
             Projects
           </h1>
           <button
-            onClick={handleNewProject}
+            onClick={() => setIsAddingProject(!isAddingProject)}
             className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-md transition-colors duration-300"
           >
-            {editingProject ? "Update Project" : "Add Project"}
+            {isAddingProject ? "Cancel" : "Add Project"}
           </button>
         </div>
 
@@ -445,104 +440,150 @@ const Projects = () => {
           onClose={() => setIsAssistantOpen(false)}
           accentColor={accentColor}
         />
-        <div className="task-form mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden">
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-xl font-semibold text-gray-800 dark:text-white">
-              {editingProject ? "Edit Project" : "Create New Project"}
-            </h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              {editingProject
-                ? "Update your project details below"
-                : "Fill in the details to create a new project"}
-            </p>
-          </div>
 
-          <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="col-span-1 md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Project Name
-                </label>
-                <input
-                  type="text"
-                  value={newProjects}
-                  onChange={(e) => setNewProjects(e.target.value)}
-                  placeholder="Enter project name"
-                  className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white transition-all duration-200"
-                  onKeyDown={(e) => e.key === "Enter" && handleNewProject()}
-                />
-              </div>
+        {isAddingProject && (
+          <div className="task-form mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-xl font-semibold text-gray-800 dark:text-white">
+                {editingProject ? "Edit Project" : "Create New Project"}
+              </h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                {editingProject
+                  ? "Update your project details below"
+                  : "Fill in the details to create a new project"}
+              </p>
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Due Date
-                </label>
-                <input
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white transition-all duration-200"
-                />
-              </div>
+            <form onSubmit={handleSaveProject} className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="col-span-1 md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Project Name
+                  </label>
+                  <input
+                    type="text"
+                    value={newProjectName}
+                    onChange={(e) => setNewProjectName(e.target.value)}
+                    placeholder="Enter project name"
+                    className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white transition-all duration-200"
+                  />
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Priority
-                </label>
-                <div className="relative">
-                  <select
-                    value={priority}
-                    onChange={(e) => setPriority(e.target.value)}
-                    className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white appearance-none transition-all duration-200"
-                  >
-                    <option value="low">Low Priority</option>
-                    <option value="normal">Normal Priority</option>
-                    <option value="medium">Medium Priority</option>
-                    <option value="high">High Priority</option>
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700 dark:text-gray-300">
-                    <svg
-                      className="fill-current h-4 w-4"
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 20 20"
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Due Date
+                  </label>
+                  <input
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white transition-all duration-200"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Priority
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={priority}
+                      onChange={(e) => setPriority(e.target.value)}
+                      className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white appearance-none transition-all duration-200"
                     >
-                      <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
-                    </svg>
+                      <option value="low">Low Priority</option>
+                      <option value="normal">Normal Priority</option>
+                      <option value="medium">Medium Priority</option>
+                      <option value="high">High Priority</option>
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700 dark:text-gray-300">
+                      <svg
+                        className="fill-current h-4 w-4"
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 20 20"
+                      >
+                        <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+                      </svg>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div className="mt-6 flex justify-end space-x-3">
-              {editingProject && (
+              <div className="mt-6 flex justify-end space-x-3">
+                {editingProject && (
+                  <button
+                    onClick={() => {
+                      setEditingProject(null);
+                      setNewProjectName("");
+                      setDueDate("");
+                      setPriority("normal");
+                      setIsAddingProject(false);
+                    }}
+                    className="px-5 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200"
+                  >
+                    Cancel
+                  </button>
+                )}
+
                 <button
-                  onClick={() => {
-                    setEditingProject(null);
-                    setNewProjects("");
-                    setDueDate("");
-                    setPriority("normal");
-                  }}
-                  className="px-5 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200"
+                  type="submit"
+                  className="px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm hover:shadow transition-all duration-200"
                 >
-                  Cancel
+                  {editingProject ? "Update Project" : "Create Project"}
                 </button>
-              )}
+              </div>
+            </form>
+          </div>
+        )}
 
-              <button
-                onClick={handleNewProject}
-                className="px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm hover:shadow transition-all duration-200"
-              >
-                {editingProject ? "Update Project" : "Create Project"}
-              </button>
-            </div>
+        {/* Filters */}
+        <div className="mt-6 flex flex-wrap justify-between items-center">
+          <div className="flex items-center space-x-4">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Show Completed:</label>
+            <input
+              type="checkbox"
+              checked={showCompleted}
+              onChange={(e) => setShowCompleted(e.target.checked)}
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            />
+          </div>
+
+          <div className="flex items-center space-x-4">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Filter by Priority:</label>
+            <select
+              value={filterPriority}
+              onChange={(e) => setFilterPriority(e.target.value)}
+              className="px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white appearance-none transition-all duration-200"
+            >
+              <option value="all">All</option>
+              <option value="low">Low</option>
+              <option value="normal">Normal</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+
+          <div className="flex items-center space-x-4">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Search:</label>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search projects..."
+              className="px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white transition-all duration-200"
+            />
           </div>
         </div>
 
         {/* Display existing projects */}
         <div className="projects-list grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
-          {projects.map((project) => (
-            <div
+          {filteredProjects.map((project) => (
+            <motion.div
               key={project.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              transition={{ duration: 0.3 }}
               className="card bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300"
             >
               <div className="p-5">
@@ -632,7 +673,7 @@ const Projects = () => {
                   </button>
                 </div>
               </div>
-            </div>
+            </motion.div>
           ))}
         </div>
       </div>
