@@ -38,11 +38,23 @@ const Projects = () => {
 
     try {
       const token = localStorage.getItem("token");
+      const userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}");
+      const userId = userInfo?.id;
 
       // Check if token exists before making the request
       if (!token) {
         console.log("No authentication token found");
         setError("Please log in to view your projects");
+        
+        // Try to load from user-specific localStorage as fallback
+        if (userId) {
+          const cachedProjects = localStorage.getItem(`projects_${userId}`);
+          if (cachedProjects) {
+            setProjects(JSON.parse(cachedProjects));
+            setError("Using cached projects. Please log in to update your projects.");
+          }
+        }
+        
         setLoading(false);
         return; // Exit early if no token
       }
@@ -74,14 +86,31 @@ const Projects = () => {
       const data = await response.json();
       setProjects(data);
 
-      // Cache projects in localStorage as a fallback
-      localStorage.setItem("projects", JSON.stringify(data));
+      // Cache projects in localStorage with user-specific key
+      if (userId) {
+        localStorage.setItem(`projects_${userId}`, JSON.stringify(data));
+      } else {
+        localStorage.setItem("projects", JSON.stringify(data)); // Fallback without userId
+      }
     } catch (error) {
       console.error("Error fetching projects:", error);
 
       // Try to load from localStorage as fallback
       try {
-        const cachedProjects = localStorage.getItem("projects");
+        const userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}");
+        const userId = userInfo?.id;
+        
+        // Try user-specific cache first
+        let cachedProjects;
+        if (userId) {
+          cachedProjects = localStorage.getItem(`projects_${userId}`);
+        }
+        
+        // Fall back to generic cache if needed
+        if (!cachedProjects) {
+          cachedProjects = localStorage.getItem("projects");
+        }
+        
         if (cachedProjects) {
           setProjects(JSON.parse(cachedProjects));
           setError("Using cached projects. Please refresh or log in again.");
@@ -133,6 +162,9 @@ const Projects = () => {
     if (newProjects.trim()) {
       try {
         const token = localStorage.getItem("token");
+        const userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}");
+        const userId = userInfo?.id;
+        
         if (!token) {
           throw new Error("Authentication required");
         }
@@ -172,11 +204,17 @@ const Projects = () => {
 
           // Update with server response
           const data = await response.json();
-          setProjects(
-            projects.map((project) =>
-              project.id === editingProject.id ? data : project
-            )
+          const updatedProjects = projects.map((project) =>
+            project.id === editingProject.id ? data : project
           );
+          setProjects(updatedProjects);
+
+          // Update localStorage with user-specific key
+          if (userId) {
+            localStorage.setItem(`projects_${userId}`, JSON.stringify(updatedProjects));
+          } else {
+            localStorage.setItem("projects", JSON.stringify(updatedProjects));
+          }
 
           setEditingProject(null);
         } else {
@@ -207,11 +245,16 @@ const Projects = () => {
 
           // Add server response (with ID) to state
           const data = await response.json();
-          setProjects([...projects, data]);
+          const updatedProjects = [...projects, data];
+          setProjects(updatedProjects);
+          
+          // Update localStorage with user-specific key
+          if (userId) {
+            localStorage.setItem(`projects_${userId}`, JSON.stringify(updatedProjects));
+          } else {
+            localStorage.setItem("projects", JSON.stringify(updatedProjects));
+          }
         }
-
-        // Update localStorage cache
-        localStorage.setItem("projects", JSON.stringify([...projects]));
 
         // Reset form
         setNewProjects("");
@@ -232,12 +275,16 @@ const Projects = () => {
   const deleteProject = async (projectId) => {
     try {
       const token = localStorage.getItem("token");
+      const userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}");
+      const userId = userInfo?.id;
+      
       if (!token) {
         throw new Error("Authentication required");
       }
 
       // Optimistic delete
-      setProjects(projects.filter((project) => project.id !== projectId));
+      const updatedProjects = projects.filter((project) => project.id !== projectId);
+      setProjects(updatedProjects);
 
       // API delete
       const response = await fetch(`${API_URL}/projects/${projectId}`, {
@@ -251,11 +298,12 @@ const Projects = () => {
         throw new Error("Failed to delete project");
       }
 
-      // Update localStorage cache
-      localStorage.setItem(
-        "projects",
-        JSON.stringify(projects.filter((project) => project.id !== projectId))
-      );
+      // Update localStorage with user-specific key
+      if (userId) {
+        localStorage.setItem(`projects_${userId}`, JSON.stringify(updatedProjects));
+      } else {
+        localStorage.setItem("projects", JSON.stringify(updatedProjects));
+      }
     } catch (error) {
       console.error("Error deleting project:", error);
       setError("Failed to delete project. Please try again.");
@@ -273,6 +321,9 @@ const Projects = () => {
   const toggleProjectCompletion = async (projectId) => {
     try {
       const token = localStorage.getItem("token");
+      const userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}");
+      const userId = userInfo?.id;
+      
       if (!token) {
         throw new Error("Authentication required");
       }
@@ -290,11 +341,10 @@ const Projects = () => {
       };
 
       // Optimistic update
-      setProjects(
-        projects.map((project) =>
-          project.id === projectId ? updatedProject : project
-        )
+      const updatedProjects = projects.map((project) =>
+        project.id === projectId ? updatedProject : project
       );
+      setProjects(updatedProjects);
 
       // API update
       const response = await fetch(`${API_URL}/projects/${projectId}`, {
@@ -310,15 +360,12 @@ const Projects = () => {
         throw new Error("Failed to update project completion status");
       }
 
-      // Update localStorage cache
-      localStorage.setItem(
-        "projects",
-        JSON.stringify(
-          projects.map((project) =>
-            project.id === projectId ? updatedProject : project
-          )
-        )
-      );
+      // Update localStorage with user-specific key
+      if (userId) {
+        localStorage.setItem(`projects_${userId}`, JSON.stringify(updatedProjects));
+      } else {
+        localStorage.setItem("projects", JSON.stringify(updatedProjects));
+      }
     } catch (error) {
       console.error("Error toggling project completion:", error);
       setError("Failed to update project status. Please try again.");
