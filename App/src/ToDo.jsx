@@ -585,7 +585,6 @@ const ToDo = () => {
     { value: "education", label: "Education", icon: "📚" },
     { value: "finance", label: "Finance", icon: "💰" },
   ];
-  d;
 
   // Get category icon
   const getCategoryIcon = (categoryValue) => {
