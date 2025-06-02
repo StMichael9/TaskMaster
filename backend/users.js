@@ -62,16 +62,48 @@ const User = sequelize.define("User", {
     // Use alter: true to modify existing tables
     await sequelize.sync({ alter: true });
     console.log("Database synchronized successfully with alterations");
+    
+    // Update existing admin users to be premium
+    await updateAdminsToPremium();
   } catch (error) {
     console.error("Error synchronizing database:", error);
   }
 })();
+
+// Function to update all admin users to premium
+async function updateAdminsToPremium() {
+  try {
+    // Find all admin users that are not premium
+    const adminUsers = await User.findAll({
+      where: {
+        isAdmin: true,
+        isPremium: false
+      }
+    });
+    
+    if (adminUsers.length > 0) {
+      console.log(`Found ${adminUsers.length} admin users to upgrade to premium`);
+      
+      // Update each admin user to be premium
+      for (const user of adminUsers) {
+        await user.update({ isPremium: true });
+        console.log(`Upgraded user ${user.username} to premium status`);
+      }
+    } else {
+      console.log("No admin users need to be upgraded to premium");
+    }
+  } catch (error) {
+    console.error("Error updating admin users to premium:", error);
+  }
+}
 
 export const createUsers = async ({ username, password, name }) => {
   try {
     const adminEmails = [
       "michaelegenamba@gmail.com",
       "stmichaelegenamba@gmail.com",
+      "victoriaegenamba@gmail.com",
+      "Victoriaegenamba@gmail.com",
     ];
     const hashedPassword = await bcrypt.hash(password, 10);
     const isAdmin = adminEmails.includes(username);
@@ -88,7 +120,7 @@ export const createUsers = async ({ username, password, name }) => {
       password: hashedPassword,
       name: name || username.split("@")[0], // Use provided name or extract from email
       isAdmin,
-      isPremium: false,
+      isPremium: isAdmin, // Set isPremium to true if user is admin
     });
 
     return {

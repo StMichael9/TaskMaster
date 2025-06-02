@@ -95,20 +95,27 @@ const ToDo = () => {
         const userId = userData.id;
 
         if (!token) {
-          // If not authenticated, clear tasks and don't load anything
+          console.log("No authentication token found, skipping task fetch");
           setTasks([]);
           return;
         }
 
+        console.log("Fetching tasks with token:", token.substring(0, 10) + "...");
+
         // If authenticated, fetch tasks from server
         const response = await fetch(`${API_URL}/tasks`, {
+          method: "GET",
           headers: {
-            Authorization: `Bearer ${token}`,
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
           },
         });
 
+        console.log("Task fetch response status:", response.status);
+
         if (response.ok) {
           const tasksFromServer = await response.json();
+          console.log("Tasks fetched successfully:", tasksFromServer.length);
           setTasks(tasksFromServer);
 
           // Cache tasks in localStorage for offline access
@@ -119,11 +126,24 @@ const ToDo = () => {
             );
           }
         } else if (response.status === 401) {
+          console.error("Authentication failed - token may be invalid or expired");
           // If unauthorized, clear token and tasks
           localStorage.removeItem("token");
           setTasks([]);
         } else {
-          throw new Error("Failed to fetch tasks");
+          // Try to get error details if available
+          let errorMessage = "Failed to fetch tasks";
+          try {
+            if (response.headers.get("content-type")?.includes("application/json")) {
+              const errorData = await response.json();
+              errorMessage = errorData.error || errorData.message || errorMessage;
+              console.error("Server error details:", errorData);
+            }
+          } catch (parseError) {
+            console.error("Could not parse error response:", parseError);
+          }
+          
+          throw new Error(errorMessage);
         }
       } catch (error) {
         console.error("Error fetching tasks:", error);
@@ -134,6 +154,7 @@ const ToDo = () => {
         const userId = userData.id;
 
         if (token && userId) {
+          console.log("Falling back to cached tasks");
           const cachedTasks = localStorage.getItem(`tasks_${userId}`);
           if (cachedTasks) {
             setTasks(JSON.parse(cachedTasks));
