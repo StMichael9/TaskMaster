@@ -173,16 +173,17 @@ function Navbar() {
           >
             Tasks
           </Link>
-          <Link
+          {/*} <Link
             to="/projects"
             className={`px-1 py-2 ${
               isActive("/projects")
                 ? "text-blue-600 dark:text-blue-400 font-medium"
                 : "text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400"
             }`}
-          >
+          > 
             Projects
           </Link>
+          */}
           <Link
             to="/notes"
             className={`px-1 py-2 ${
@@ -420,7 +421,7 @@ function Navbar() {
           >
             Settings
           </Link>
-          
+
           {/* Add login/signup buttons for mobile if not logged in */}
           {!isLoggedIn && (
             <div className="pt-2 mt-2 border-t border-gray-200 dark:border-gray-700">
