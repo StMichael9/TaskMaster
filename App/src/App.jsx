@@ -57,7 +57,6 @@ function App() {
               <Route path="/" element={<Dashboard />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/tasks" element={<ToDo />} />
-              <Route path="/projects" element={<Projects />} />
               <Route path="/notes" element={<Notes />} />
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<SignUp />} />
