@@ -391,7 +391,7 @@ function Navbar() {
           >
             Tasks
           </Link>
-          <Link
+          {/*<Link
             to="/projects"
             className={`block px-3 py-2 rounded-md ${
               isActive("/projects")
@@ -400,7 +400,7 @@ function Navbar() {
             }`}
           >
             Projects
-          </Link>
+          </Link> */}
           <Link
             to="/notes"
             className={`block px-3 py-2 rounded-md ${
