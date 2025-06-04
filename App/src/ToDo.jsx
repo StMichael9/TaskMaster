@@ -62,6 +62,54 @@ const ToDo = () => {
 
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
+  // Add this function after your state declarations but before useEffect hooks
+  const syncTasksWithServer = async (forceFetch = false) => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        setIsOffline(true);
+        return;
+      }
+
+      // First, try to push any local changes to server
+      const localTasks = JSON.parse(localStorage.getItem(`tasks_${userId}`) || "[]");
+      
+      // Then fetch latest from server
+      const response = await fetch(`${API_URL}/tasks`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (response.ok) {
+        const serverTasks = await response.json();
+        console.log("Tasks fetched from server:", serverTasks.length);
+        
+        if (Array.isArray(serverTasks)) {
+          // Update local state with server data
+          setTasks(serverTasks);
+          
+          // Update localStorage cache
+          if (userId) {
+            localStorage.setItem(`tasks_${userId}`, JSON.stringify(serverTasks));
+          }
+          
+          setIsOffline(false);
+        }
+      } else if (response.status === 401) {
+        console.error("Authentication failed - token may be invalid or expired");
+        setIsOffline(true);
+      } else {
+        throw new Error(`Server returned status ${response.status}`);
+      }
+    } catch (error) {
+      console.error("Error syncing tasks with server:", error);
+      setIsOffline(true);
+    }
+  };
+
   useEffect(() => {
     const token = localStorage.getItem("token");
 
@@ -274,6 +322,7 @@ const ToDo = () => {
       document.removeEventListener("addTask", handleAddTaskEvent);
     };
   }, []);
+
   // Focus on input when adding task
   useEffect(() => {
     if (isAddingTask && newTaskInputRef.current) {
@@ -288,85 +337,108 @@ const ToDo = () => {
     }
   }, [editingTask]);
 
-  // Function to add a new task
+  // Add this useEffect to periodically sync with server
+  useEffect(() => {
+    // Only attempt to sync if user is logged in
+    if (!userId) return;
+    
+    // Initial sync when component mounts
+    syncTasksWithServer();
+    
+    // Set up periodic sync every 30 seconds
+    const syncInterval = setInterval(() => {
+      syncTasksWithServer();
+    }, 30000);
+    
+    // Clean up interval on unmount
+    return () => clearInterval(syncInterval);
+  }, [userId]);
+
+  // Modify your addTask function to ensure better server sync
   const addTask = async () => {
     if (newTask.trim()) {
       const task = {
         title: newTask,
-        description: "", // You can add a description field to your form if needed
+        description: "",
         priority: priority,
         category: taskCategory,
         dueDate: dueDate ? new Date(dueDate).toISOString() : null,
       };
 
+      // Create a temporary ID for optimistic UI update
+      const tempId = `temp_${Date.now()}`;
+      
+      // Add to local state immediately for responsive UI
+      const newTaskObj = {
+        id: tempId,
+        text: newTask,
+        completed: false,
+        createdAt: new Date().toISOString(),
+        priority: priority,
+        category: taskCategory,
+        dueDate: dueDate ? new Date(dueDate).toISOString() : null,
+      };
+      
+      setTasks(prevTasks => [...prevTasks, newTaskObj]);
+
       try {
         const token = localStorage.getItem("token");
-        console.log("Token exists:", !!token);
+        
         if (token) {
-          console.log("Token first 10 chars:", token.substring(0, 10) + "...");
-        }
+          // If authenticated, create task on backend
+          const response = await fetch(`${API_URL}/tasks`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(task),
+          });
 
-        let createdTaskFromServer = null;
-
-        if (token) {
-          try {
-            // If authenticated, create task on backend
-            const response = await fetch(`${API_URL}/tasks`, {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify(task),
-            });
-
-            if (response.ok) {
-              // Get the created task with server-generated ID
-              createdTaskFromServer = await response.json();
-              console.log("Task created on server:", createdTaskFromServer);
-            } else if (response.status === 401) {
-              // If unauthorized, clear the invalid token
-              console.log(
-                "Authentication failed - token may be invalid or expired"
+          if (response.ok) {
+            // Get the created task with server-generated ID
+            const createdTaskFromServer = await response.json();
+            console.log("Task created on server:", createdTaskFromServer);
+            
+            // Replace the temporary task with the server version
+            setTasks(prevTasks => 
+              prevTasks.map(t => 
+                t.id === tempId ? {...createdTaskFromServer, text: newTask} : t
+              )
+            );
+            
+            // Update localStorage
+            if (userId) {
+              const updatedTasks = tasks.map(t => 
+                t.id === tempId ? {...createdTaskFromServer, text: newTask} : t
               );
-              localStorage.removeItem("token");
-              throw new Error("Invalid or expired token");
-            } else {
-              const errorData = await response.json();
-              throw new Error(errorData.error || "Failed to create task");
+              localStorage.setItem(`tasks_${userId}`, JSON.stringify(updatedTasks));
             }
-          } catch (err) {
-            console.warn("Failed to create task on server:", err.message);
-            // We'll continue and create the task locally
+          } else if (response.status === 401) {
+            console.log("Authentication failed - token may be invalid or expired");
+            localStorage.removeItem("token");
+            setIsOffline(true);
+          } else {
+            throw new Error(`Server returned status ${response.status}`);
           }
+        } else {
+          // Not authenticated, mark as offline
+          setIsOffline(true);
         }
-
-        // Add to local state - use server data if available, otherwise create locally
-        setTasks([
-          ...tasks,
-          {
-            id: createdTaskFromServer?.id || Date.now(),
-            text: newTask,
-            completed: false,
-            createdAt: new Date().toISOString(),
-            priority: priority,
-            category: taskCategory,
-            dueDate: dueDate ? new Date(dueDate).toISOString() : null,
-          },
-        ]);
-
-        setNewTask(""); // Clear input after adding
-        setPriority("medium"); // Reset priority
-        setDueDate(""); // Reset due date
-        setIsAddingTask(false); // Close add task form
       } catch (error) {
         console.error("Error adding task:", error);
-        // You could show an error notification here
+        // Keep the task in local state with temporary ID
+        setIsOffline(true);
       }
+
+      // Reset form regardless of server response
+      setNewTask("");
+      setPriority("medium");
+      setDueDate("");
+      setIsAddingTask(false);
     }
   };
 
-  // Function to toggle task completion
   // Function to toggle task completion
   const toggleCompletion = async (taskId) => {
     const task = tasks.find((t) => t.id === taskId);
@@ -426,7 +498,6 @@ const ToDo = () => {
     }
   };
 
-  // Function to delete a task
   // Function to delete a task
   const deleteTask = async (taskId) => {
     const taskToDelete = tasks.find((task) => task.id === taskId);
@@ -1111,7 +1182,6 @@ const ToDo = () => {
         </div>
       )}
 
-      {/* AI Assistant Button */}
       {/* AI Assistant Button */}
       <button
         onClick={() => setIsAssistantOpen(true)}
