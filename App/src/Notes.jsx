@@ -72,6 +72,19 @@ const Notes = () => {
   // Fetch notes from server
   const fetchNotes = async () => {
     setLoading(true);
+    
+    // First load from localStorage for immediate display
+    try {
+      const savedNotes = localStorage.getItem("stickyNotes");
+      if (savedNotes) {
+        const parsedNotes = JSON.parse(savedNotes);
+        setNotes(parsedNotes);
+      }
+    } catch (error) {
+      console.error("Error loading notes from localStorage:", error);
+    }
+    
+    // Then try to fetch from server
     try {
       const token = localStorage.getItem("token");
       if (!token) {
@@ -86,9 +99,15 @@ const Notes = () => {
       });
 
       if (response.status === 401) {
-        localStorage.removeItem("token");
-        setLoading(false);
-        return;
+        // Try to refresh the token
+        const refreshed = await refreshAuthToken();
+        if (!refreshed) {
+          setLoading(false);
+          return;
+        }
+        
+        // Retry with new token
+        return fetchNotes();
       }
 
       if (!response.ok) {
@@ -97,16 +116,147 @@ const Notes = () => {
 
       const data = await response.json();
       
-      // Update state with server data
-      setNotes(data);
+      // Merge local and server notes to prevent data loss
+      const mergedNotes = mergeNotes(notes, data);
       
-      // Update localStorage with server data to ensure consistency
-      localStorage.setItem("stickyNotes", JSON.stringify(data));
+      // Update state with merged data
+      setNotes(mergedNotes);
+      
+      // Update localStorage with merged data
+      localStorage.setItem("stickyNotes", JSON.stringify(mergedNotes));
+      
+      // Sync any local-only notes to server
+      syncLocalNotesToServer(mergedNotes);
     } catch (err) {
       console.error("Error fetching notes:", err);
-      setError("Failed to load notes. Please try again later.");
+      setError("Failed to load notes from server. Using locally saved notes.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Helper function to merge local and server notes
+  const mergeNotes = (localNotes, serverNotes) => {
+    const notesMap = new Map();
+    
+    // Add all server notes to the map
+    serverNotes.forEach(note => {
+      notesMap.set(note.id, note);
+    });
+    
+    // Add or update with local notes
+    localNotes.forEach(note => {
+      // If it's a local-only note (has _isOptimistic flag)
+      if (note._isOptimistic) {
+        notesMap.set(note.id, note);
+      } 
+      // If it's a note that exists on server but might have local changes
+      else if (notesMap.has(note.id)) {
+        const serverNote = notesMap.get(note.id);
+        // Use the more recently updated version
+        if (new Date(note.updatedAt) > new Date(serverNote.updatedAt)) {
+          notesMap.set(note.id, note);
+        }
+      } 
+      // If it's a note that doesn't exist on server yet
+      else {
+        notesMap.set(note.id, note);
+      }
+    });
+    
+    // Convert map back to array and sort by pinned status and creation date
+    return Array.from(notesMap.values())
+      .sort((a, b) => {
+        // Pinned notes first
+        if (a.pinned && !b.pinned) return -1;
+        if (!a.pinned && b.pinned) return 1;
+        // Then by creation date (newest first)
+        return new Date(b.createdAt) - new Date(a.createdAt);
+      });
+  };
+
+  // Function to sync local notes to server
+  const syncLocalNotesToServer = async (notes) => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    
+    setIsSyncing(true);
+    
+    try {
+      // Find notes that need to be synced (have _isOptimistic flag)
+      const notesToSync = notes.filter(note => note._isOptimistic);
+      
+      if (notesToSync.length === 0) {
+        setIsSyncing(false);
+        return;
+      }
+      
+      console.log(`Syncing ${notesToSync.length} notes to server...`);
+      
+      // Use the backup endpoint to sync all notes at once
+      const response = await fetch(`${API_URL}/notes/backup`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ notes: notesToSync }),
+      });
+      
+      if (!response.ok) {
+        throw new Error("Failed to sync notes to server");
+      }
+      
+      const result = await response.json();
+      console.log(`Synced ${result.count} notes to server`);
+      
+      // After successful sync, remove _isOptimistic flag from notes
+      const updatedNotes = notes.map(note => {
+        if (note._isOptimistic) {
+          const { _isOptimistic, ...cleanNote } = note;
+          return cleanNote;
+        }
+        return note;
+      });
+      
+      setNotes(updatedNotes);
+      localStorage.setItem("stickyNotes", JSON.stringify(updatedNotes));
+      
+    } catch (error) {
+      console.error("Error syncing notes to server:", error);
+      setError("Failed to sync some notes to server. They will be saved locally and synced later.");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Add a function to refresh the auth token
+  const refreshAuthToken = async () => {
+    try {
+      const refreshToken = localStorage.getItem("refreshToken");
+      if (!refreshToken) return false;
+      
+      const response = await fetch(`${API_URL}/refresh-token`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ refreshToken }),
+      });
+      
+      if (!response.ok) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("refreshToken");
+        return false;
+      }
+      
+      const data = await response.json();
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("refreshToken", data.refreshToken);
+      return true;
+    } catch (error) {
+      console.error("Error refreshing token:", error);
+      return false;
     }
   };
 
@@ -351,6 +501,36 @@ const Notes = () => {
 
   const pinnedNotes = notes.filter((note) => note.pinned);
   const unpinnedNotes = notes.filter((note) => !note.pinned);
+
+  // Save to localStorage whenever notes change
+  useEffect(() => {
+    if (notes.length > 0) {
+      localStorage.setItem("stickyNotes", JSON.stringify(notes));
+    }
+    
+    // Set up auto-sync to server
+    const autoSyncInterval = setInterval(() => {
+      if (notes.some(note => note._isOptimistic)) {
+        syncLocalNotesToServer(notes);
+      }
+    }, 60000); // Sync every minute if there are unsaved notes
+    
+    return () => clearInterval(autoSyncInterval);
+  }, [notes]);
+
+  // Handle window beforeunload event
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      // Save to localStorage before page unloads
+      localStorage.setItem("stickyNotes", JSON.stringify(notes));
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [notes]);
 
   if (loading) {
     return (

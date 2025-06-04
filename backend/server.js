@@ -545,6 +545,8 @@ app.delete("/notes/:noteId", requireAuth, async (req, res) => {
 });
 
 // Backup notes endpoint - allows clients to backup all their notes
+// Improve the notes backup endpoint to handle merging better
+
 app.post("/notes/backup", requireAuth, async (req, res) => {
   try {
     const userId = req.auth.id;
@@ -556,48 +558,67 @@ app.post("/notes/backup", requireAuth, async (req, res) => {
 
     console.log(`Backing up ${notes.length} notes for user ${userId}`);
 
-    // First, get existing notes to avoid duplicates
-    const existingNotes = await Note.findAll({
-      where: { userId },
-      attributes: [
-        "text",
-        "color",
-        "rotation",
-        "pinned",
-        "font",
-        "textColor",
-        "createdAt",
-      ],
-    });
+    // Process each note individually for better control
+    const results = [];
 
-    // Create a map of existing notes by their content signature to avoid duplicates
-    const existingNotesMap = new Map();
-    existingNotes.forEach((note) => {
-      const signature = `${note.text}-${note.color}-${note.font}`;
-      existingNotesMap.set(signature, true);
-    });
+    for (const note of notes) {
+      // Add userId to the note
+      const noteWithUserId = { ...note, userId };
 
-    // Filter out duplicates and add userId to each note
-    const notesToCreate = notes
-      .filter((note) => {
-        const signature = `${note.text}-${note.color}-${note.font}`;
-        return !existingNotesMap.has(signature);
-      })
-      .map((note) => ({
-        ...note,
-        userId,
-      }));
+      // Remove any client-side flags
+      delete noteWithUserId._isOptimistic;
 
-    if (notesToCreate.length === 0) {
-      return res.json({ message: "No new notes to backup", count: 0 });
+      // Check if this note already exists by ID
+      let existingNote = null;
+
+      if (note.id) {
+        existingNote = await Note.findOne({
+          where: {
+            id: note.id,
+            userId,
+          },
+        });
+      }
+
+      // If no exact ID match, try to find by content
+      if (!existingNote) {
+        existingNote = await Note.findOne({
+          where: {
+            text: note.text,
+            userId,
+            color: note.color,
+            font: note.font,
+          },
+        });
+      }
+
+      if (existingNote) {
+        // Update existing note, preserving server ID
+        await existingNote.update({
+          ...noteWithUserId,
+          id: existingNote.id, // Ensure we keep the server ID
+        });
+
+        results.push({
+          status: "updated",
+          id: existingNote.id,
+          clientId: note.id, // Return the client ID for mapping
+        });
+      } else {
+        // Create new note
+        const newNote = await Note.create(noteWithUserId);
+
+        results.push({
+          status: "created",
+          id: newNote.id,
+          clientId: note.id, // Return the client ID for mapping
+        });
+      }
     }
-
-    // Bulk create the new notes
-    const createdNotes = await Note.bulkCreate(notesToCreate);
 
     res.status(201).json({
       message: "Notes backed up successfully",
-      count: createdNotes.length,
+      results,
     });
   } catch (error) {
     console.error("Error backing up notes:", error);
