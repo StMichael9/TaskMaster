@@ -55,6 +55,7 @@ const ToDo = () => {
   const [editCategory, setEditCategory] = useState("personal");
   const [editDueDate, setEditDueDate] = useState("");
   const [userId, setUserId] = useState(null);
+  const [isOffline, setIsOffline] = useState(false);
 
   const newTaskInputRef = useRef(null);
   const editTaskInputRef = useRef(null);
@@ -94,75 +95,79 @@ const ToDo = () => {
         const userData = JSON.parse(localStorage.getItem("userInfo") || "{}");
         const userId = userData.id;
 
+        // First, try to load cached tasks regardless of authentication status
+        if (userId) {
+          const userTasks = localStorage.getItem(`tasks_${userId}`);
+          if (userTasks) {
+            const cachedTasks = JSON.parse(userTasks);
+            // Set tasks from cache first, then we'll update if server fetch succeeds
+            setTasks(cachedTasks);
+          }
+        }
+
+        // If not authenticated, just use cached tasks and return
         if (!token) {
-          console.log("No authentication token found, skipping task fetch");
-          setTasks([]);
+          console.log("No authentication token found, using cached tasks only");
           return;
         }
 
-        console.log("Fetching tasks with token:", token.substring(0, 10) + "...");
+        console.log(
+          "Fetching tasks with token:",
+          token.substring(0, 10) + "..."
+        );
 
         // If authenticated, fetch tasks from server
         const response = await fetch(`${API_URL}/tasks`, {
           method: "GET",
           headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json"
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
           },
         });
-
-        console.log("Task fetch response status:", response.status);
 
         if (response.ok) {
           const tasksFromServer = await response.json();
           console.log("Tasks fetched successfully:", tasksFromServer.length);
-          setTasks(tasksFromServer);
 
-          // Cache tasks in localStorage for offline access
-          if (userId) {
-            localStorage.setItem(
-              `tasks_${userId}`,
-              JSON.stringify(tasksFromServer)
-            );
+          // Only update tasks if we got a valid response with tasks
+          if (Array.isArray(tasksFromServer)) {
+            setTasks(tasksFromServer);
+
+            // Cache tasks in localStorage for offline access
+            if (userId) {
+              localStorage.setItem(
+                `tasks_${userId}`,
+                JSON.stringify(tasksFromServer)
+              );
+            }
           }
         } else if (response.status === 401) {
-          console.error("Authentication failed - token may be invalid or expired");
-          // If unauthorized, clear token and tasks
-          localStorage.removeItem("token");
-          setTasks([]);
+          console.error(
+            "Authentication failed - token may be invalid or expired"
+          );
+          // Don't clear tasks here, just try to refresh the token
+          // You could add a call to your refreshToken function here
         } else {
           // Try to get error details if available
           let errorMessage = "Failed to fetch tasks";
           try {
-            if (response.headers.get("content-type")?.includes("application/json")) {
+            if (
+              response.headers.get("content-type")?.includes("application/json")
+            ) {
               const errorData = await response.json();
-              errorMessage = errorData.error || errorData.message || errorMessage;
+              errorMessage =
+                errorData.error || errorData.message || errorMessage;
               console.error("Server error details:", errorData);
             }
           } catch (parseError) {
             console.error("Could not parse error response:", parseError);
           }
-          
+
           throw new Error(errorMessage);
         }
       } catch (error) {
         console.error("Error fetching tasks:", error);
-
-        // On error, if authenticated, try to load from cache
-        const token = localStorage.getItem("token");
-        const userData = JSON.parse(localStorage.getItem("userInfo") || "{}");
-        const userId = userData.id;
-
-        if (token && userId) {
-          console.log("Falling back to cached tasks");
-          const cachedTasks = localStorage.getItem(`tasks_${userId}`);
-          if (cachedTasks) {
-            setTasks(JSON.parse(cachedTasks));
-          }
-        } else {
-          // If not authenticated, ensure tasks are empty
-          setTasks([]);
-        }
+        // Don't clear tasks on error, just keep using what we have
       }
     };
 
@@ -174,29 +179,69 @@ const ToDo = () => {
       if (event.key === "token") {
         if (event.newValue) {
           // Token was added (user logged in)
-          fetchTasks();
-        } else {
-          // Token was removed (user logged out)
-          // Clear tasks when logging out
-          setTasks([]);
+          console.log("User logged in, fetching latest tasks");
 
-          // Get the user ID before it's removed from localStorage
+          // Check if user ID changed
           try {
             const userData = JSON.parse(
               localStorage.getItem("userInfo") || "{}"
             );
-            const userId = userData.id;
+            const newUserId = userData.id;
 
-            // Clear user-specific tasks
-            if (userId) {
-              localStorage.removeItem(`tasks_${userId}`);
+            if (newUserId && newUserId !== userId) {
+              console.log("Different user logged in, switching task context");
+              setUserId(newUserId);
+
+              // Load this user's cached tasks first for immediate display
+              const userTasks = localStorage.getItem(`tasks_${newUserId}`);
+              if (userTasks) {
+                setTasks(JSON.parse(userTasks));
+              }
             }
           } catch (error) {
-            console.error("Error clearing user tasks:", error);
+            console.error("Error processing user data on login:", error);
           }
 
-          // Also clear general tasks in localStorage to prevent data leakage
-          localStorage.removeItem("tasks");
+          // Then fetch fresh tasks from server
+          fetchTasks();
+
+          // Remove offline indicator if you added one
+          setIsOffline(false);
+        } else {
+          // Token was removed (user logged out)
+          console.log("User logged out, keeping tasks visible in offline mode");
+
+          // Add visual indicator that user is offline
+          setIsOffline(true);
+
+          // Optionally, you could save the current state as "offline tasks"
+          // so they can be synced when the user logs back in
+          if (userId) {
+            localStorage.setItem(
+              `offline_tasks_${userId}`,
+              JSON.stringify(tasks)
+            );
+          }
+        }
+        // Add this to your fetchTasks function
+        const syncOfflineTasks = () => {
+          if (userId) {
+            const offlineTasks = localStorage.getItem(
+              `offline_tasks_${userId}`
+            );
+            if (offlineTasks) {
+              // Logic to merge offline tasks with server tasks
+              // This would depend on your specific requirements
+
+              // Clear offline tasks after syncing
+              localStorage.removeItem(`offline_tasks_${userId}`);
+            }
+          }
+        };
+
+        // Call this when a user logs in
+        if (token) {
+          syncOfflineTasks();
         }
       }
     };
@@ -636,6 +681,28 @@ const ToDo = () => {
             </span>
           </button>
 
+          {isOffline && (
+            <div className="offline-indicator bg-yellow-100 text-yellow-800 p-2 rounded-md mb-4">
+              <div className="flex items-center">
+                <svg
+                  className="w-5 h-5 mr-2"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  />
+                </svg>
+                <span>
+                  You're offline. Changes will be saved when you reconnect.
+                </span>
+              </div>
+            </div>
+          )}
           {isColorPickerOpen && (
             <div className="absolute right-0 mt-2 p-2 bg-white dark:bg-gray-700 rounded shadow-lg z-10">
               <div className="flex flex-wrap gap-2 mb-2">
@@ -832,7 +899,7 @@ const ToDo = () => {
               strokeLinecap="round"
               strokeLinejoin="round"
               strokeWidth={1}
-              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 5a2 2 0 012-2h2a2 2 0 012 2"
             />
           </svg>
           <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-300">

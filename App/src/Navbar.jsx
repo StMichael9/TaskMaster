@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 function Navbar() {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -12,6 +12,12 @@ function Navbar() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userInitials, setUserInitials] = useState(""); // For the user icon
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+
+  // Add refs for the dropdown menus
+  const userMenuRef = useRef(null);
+  const userButtonRef = useRef(null);
+  const mobileMenuRef = useRef(null);
+  const mobileMenuButtonRef = useRef(null);
 
   const location = useLocation();
 
@@ -47,6 +53,41 @@ function Navbar() {
       window.removeEventListener("authChange", checkAuthStatus);
     };
   }, [location]); // Re-check auth when location changes
+
+  // Add click outside handler
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      // Handle user menu clicks outside
+      if (
+        isUserMenuOpen &&
+        userMenuRef.current && 
+        userButtonRef.current &&
+        !userMenuRef.current.contains(event.target) &&
+        !userButtonRef.current.contains(event.target)
+      ) {
+        setIsUserMenuOpen(false);
+      }
+      
+      // Handle mobile menu clicks outside
+      if (
+        isMobileMenuOpen &&
+        mobileMenuRef.current &&
+        mobileMenuButtonRef.current &&
+        !mobileMenuRef.current.contains(event.target) &&
+        !mobileMenuButtonRef.current.contains(event.target)
+      ) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+
+    // Add event listener
+    document.addEventListener("mousedown", handleClickOutside);
+    
+    // Clean up
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isUserMenuOpen, isMobileMenuOpen]);
 
   // Function to check authentication status
   const checkAuthStatus = () => {
@@ -97,10 +138,14 @@ function Navbar() {
 
   const toggleMobileMenu = () => {
     setIsMobileMenuOpen(!isMobileMenuOpen);
+    // Close user menu if it's open
+    if (isUserMenuOpen) setIsUserMenuOpen(false);
   };
 
   const toggleUserMenu = () => {
     setIsUserMenuOpen(!isUserMenuOpen);
+    // Close mobile menu if it's open
+    if (isMobileMenuOpen) setIsMobileMenuOpen(false);
   };
 
   const handleLogout = () => {
@@ -303,6 +348,7 @@ function Navbar() {
           ) : (
             <div className="relative">
               <button
+                ref={userButtonRef}
                 onClick={toggleUserMenu}
                 className="flex items-center space-x-2 p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
               >
@@ -313,7 +359,10 @@ function Navbar() {
 
               {/* User dropdown menu */}
               {isUserMenuOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-50 border border-gray-200 dark:border-gray-700">
+                <div
+                  ref={userMenuRef}
+                  className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-50 border border-gray-200 dark:border-gray-700"
+                >
                   <Link
                     to="/profile"
                     className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -339,6 +388,7 @@ function Navbar() {
 
           {/* Mobile menu button */}
           <button
+            ref={mobileMenuButtonRef}
             className="md:hidden p-2 rounded-md bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 transition-all duration-300"
             onClick={toggleMobileMenu}
             aria-label="Toggle mobile menu"
@@ -366,6 +416,7 @@ function Navbar() {
 
       {/* Mobile menu with animation */}
       <div
+        ref={mobileMenuRef}
         className={`md:hidden overflow-hidden transition-all duration-300 ease-in-out ${
           isMobileMenuOpen ? "max-h-96 opacity-100 mt-3" : "max-h-0 opacity-0"
         }`}
