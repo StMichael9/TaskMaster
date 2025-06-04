@@ -171,6 +171,45 @@ const Note = sequelize.define("Note", {
   },
 });
 
+// Define your Task model
+const Task = sequelize.define("Task", {
+  title: {
+    type: Sequelize.STRING,
+    allowNull: false,
+  },
+  description: {
+    type: Sequelize.TEXT,
+    allowNull: true,
+  },
+  completed: {
+    type: Sequelize.BOOLEAN,
+    defaultValue: false,
+  },
+  dueDate: {
+    type: Sequelize.DATE,
+    allowNull: true,
+  },
+  priority: {
+    type: Sequelize.STRING,
+    defaultValue: "normal",
+  },
+  projectId: {
+    type: Sequelize.INTEGER,
+    allowNull: true,
+  },
+  userId: {
+    type: Sequelize.INTEGER,
+    allowNull: false,
+  },
+  createdAt: {
+    type: Sequelize.DATE,
+    defaultValue: Sequelize.NOW,
+  },
+});
+
+// Make Task available to imported functions
+sequelize.models.Task = Task;
+
 // Sync the model with the database
 sequelize
   .sync({ alter: true })
