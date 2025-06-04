@@ -3,49 +3,21 @@ import { v4 as uuidv4 } from "uuid";
 import "./Styles/Notes.css";
 
 const Notes = () => {
-  // Initialize with notes from localStorage for instant loading
-  const [notes, setNotes] = useState(() => {
-    try {
-      const token = localStorage.getItem("token");
-      
-      // Only load notes if user is authenticated
-      if (token) {
-        const userData = JSON.parse(localStorage.getItem("userInfo") || "{}");
-        const userId = userData.id;
-        
-        if (userId) {
-          const userNotes = localStorage.getItem(`notes_${userId}`);
-          if (userNotes) {
-            return JSON.parse(userNotes);
-          }
-        }
-        
-        // Fall back to general notes if user-specific not found
-        const savedNotes = localStorage.getItem("stickyNotes");
-        return savedNotes ? JSON.parse(savedNotes) : [];
-      }
-      
-      return [];
-    } catch (error) {
-      console.error("Error loading notes from localStorage:", error);
-      return [];
-    }
-  });
-
+  const [notes, setNotes] = useState([]);
   const [newNoteText, setNewNoteText] = useState("");
   const [newNoteColor, setNewNoteColor] = useState("#f8e16c");
   const [newNoteFont, setNewNoteFont] = useState("'Caveat', cursive");
   const [newNoteTextColor, setNewNoteTextColor] = useState("#000000");
   const [animatingNoteId, setAnimatingNoteId] = useState(null);
-  const [loading, setLoading] = useState(false); // Start with false to show content immediately
+  const [loading, setLoading] = useState(true); // Start with true to show loading initially
   const [error, setError] = useState(null);
   const [showFontDropdown, setShowFontDropdown] = useState(false);
   const [userId, setUserId] = useState(null);
-  const [isSyncing, setIsSyncing] = useState(false); // New state for background syncing
+  const [isSyncing, setIsSyncing] = useState(false);
   const gridRef = useRef(null);
   const fontDropdownRef = useRef(null);
 
-  // Rest of your constants remain the same
+  // Constants
   const fontOptions = [
     { name: "Handwritten", value: "'Caveat', cursive" },
     { name: "Sans Serif", value: "'Arial', sans-serif" },
@@ -78,20 +50,32 @@ const Notes = () => {
     }
   }, []);
 
-  // Fetch notes from server in the background after component mounts
+  // Improved data loading strategy:
+  // 1. First load from localStorage for instant display
+  // 2. Then fetch from server and update if newer data exists
   useEffect(() => {
-    if (userId) {
-      fetchNotesInBackground();
+    // First load from localStorage for instant display
+    try {
+      const savedNotes = localStorage.getItem("stickyNotes");
+      if (savedNotes) {
+        const parsedNotes = JSON.parse(savedNotes);
+        setNotes(parsedNotes);
+      }
+    } catch (error) {
+      console.error("Error loading notes from localStorage:", error);
     }
+    
+    // Then fetch from server
+    fetchNotes();
   }, [userId]);
 
-  // Fetch notes without blocking the UI
-  const fetchNotesInBackground = async () => {
-    setIsSyncing(true);
+  // Fetch notes from server
+  const fetchNotes = async () => {
+    setLoading(true);
     try {
       const token = localStorage.getItem("token");
       if (!token) {
-        setIsSyncing(false);
+        setLoading(false);
         return;
       }
 
@@ -103,7 +87,7 @@ const Notes = () => {
 
       if (response.status === 401) {
         localStorage.removeItem("token");
-        setIsSyncing(false);
+        setLoading(false);
         return;
       }
 
@@ -113,25 +97,20 @@ const Notes = () => {
 
       const data = await response.json();
       
-      // Only update if we got data from the server
-      if (data && data.length > 0) {
-        setNotes(data);
-        
-        // Cache the notes in localStorage
-        if (userId) {
-          localStorage.setItem(`notes_${userId}`, JSON.stringify(data));
-        }
-        localStorage.setItem("stickyNotes", JSON.stringify(data));
-      }
+      // Update state with server data
+      setNotes(data);
+      
+      // Update localStorage with server data to ensure consistency
+      localStorage.setItem("stickyNotes", JSON.stringify(data));
     } catch (err) {
       console.error("Error fetching notes:", err);
-      // Don't show error to user since this is background sync
+      setError("Failed to load notes. Please try again later.");
     } finally {
-      setIsSyncing(false);
+      setLoading(false);
     }
   };
 
-  // Add a note - optimistic update with background sync
+  // Add a note with proper server sync
   const addNote = async () => {
     if (newNoteText.trim() === "") return;
 
@@ -141,7 +120,7 @@ const Notes = () => {
     const tempId = uuidv4();
     
     const newNote = {
-      id: tempId, // Use temporary ID for optimistic update
+      id: tempId,
       text: newNoteText,
       color: newNoteColor,
       textColor: newNoteTextColor,
@@ -149,7 +128,7 @@ const Notes = () => {
       rotation: rotation,
       pinned: false,
       createdAt: new Date().toISOString(),
-      _isOptimistic: true // Flag to identify this is not yet saved to server
+      _isOptimistic: true
     };
 
     // Optimistically add to state
@@ -167,17 +146,10 @@ const Notes = () => {
       setAnimatingNoteId(null);
     }, 800);
 
-    // Save to localStorage immediately
-    const updatedNotes = [newNote, ...notes];
-    if (userId) {
-      localStorage.setItem(`notes_${userId}`, JSON.stringify(updatedNotes));
-    }
-    localStorage.setItem("stickyNotes", JSON.stringify(updatedNotes));
-
-    // Then try to save to server in background
+    // Save to server
     try {
       const token = localStorage.getItem("token");
-      if (!token) return; // Skip server save if not authenticated
+      if (!token) return;
 
       const response = await fetch(`${API_URL}/notes`, {
         method: "POST",
@@ -212,18 +184,15 @@ const Notes = () => {
         note.id === tempId ? { ...savedNote } : note
       );
       
-      if (userId) {
-        localStorage.setItem(`notes_${userId}`, JSON.stringify(updatedNotesWithServer));
-      }
       localStorage.setItem("stickyNotes", JSON.stringify(updatedNotesWithServer));
       
     } catch (err) {
       console.error("Error adding note to server:", err);
-      // Note remains in UI with temporary ID
+      setError("Failed to save note to server. Your note is saved locally but may not sync across devices.");
     }
   };
 
-  // Update a note - optimistic update with background sync
+  // Update a note with proper server sync
   const updateNoteText = async (id, newText, updates = {}) => {
     // First update locally for immediate feedback
     setNotes(
@@ -232,21 +201,18 @@ const Notes = () => {
       )
     );
     
-    // Update localStorage immediately
+    // Update localStorage immediately for local persistence
     const updatedNotes = notes.map(note => 
       note.id === id ? { ...note, text: newText, ...updates } : note
     );
     
-    if (userId) {
-      localStorage.setItem(`notes_${userId}`, JSON.stringify(updatedNotes));
-    }
     localStorage.setItem("stickyNotes", JSON.stringify(updatedNotes));
 
     // Check if this is an optimistic note that hasn't been saved to server yet
     const note = notes.find((n) => n.id === id);
     if (note && note._isOptimistic) return;
 
-    // Then try to update on server in background
+    // Then update on server
     try {
       const token = localStorage.getItem("token");
       if (!token) return;
@@ -263,7 +229,7 @@ const Notes = () => {
       if (!response.ok) throw new Error("Failed to update note");
     } catch (err) {
       console.error("Error updating note:", err);
-      // Note remains updated in UI regardless of server error
+      setError("Failed to update note on server. Your changes are saved locally but may not sync across devices.");
     }
   };
 
@@ -283,7 +249,7 @@ const Notes = () => {
     }
   };
 
-  // Toggle pinned status - optimistic update
+  // Toggle pinned status with proper server sync
   const togglePinned = async (id) => {
     const note = notes.find((note) => note.id === id);
     if (!note) return;
@@ -302,15 +268,12 @@ const Notes = () => {
       note.id === id ? { ...note, pinned: newPinnedStatus } : note
     );
     
-    if (userId) {
-      localStorage.setItem(`notes_${userId}`, JSON.stringify(updatedNotes));
-    }
     localStorage.setItem("stickyNotes", JSON.stringify(updatedNotes));
 
     // Skip server update for optimistic notes
     if (note._isOptimistic) return;
 
-    // Update server in background
+    // Update server
     try {
       const token = localStorage.getItem("token");
       if (!token) return;
@@ -327,10 +290,11 @@ const Notes = () => {
       if (!response.ok) throw new Error("Failed to update note");
     } catch (err) {
       console.error("Error toggling pin status:", err);
+      setError("Failed to update pin status on server. Your changes are saved locally but may not sync across devices.");
     }
   };
 
-  // Delete note - optimistic update
+  // Delete note with proper server sync
   const deleteNote = async (id) => {
     // Add animation first
     const noteElement = document.getElementById(`note-${id}`);
@@ -341,14 +305,11 @@ const Notes = () => {
     // Remove from state after animation
     setTimeout(() => {
       setNotes(notes.filter((note) => note.id !== id));
+      
+      // Update localStorage
+      const updatedNotes = notes.filter(note => note.id !== id);
+      localStorage.setItem("stickyNotes", JSON.stringify(updatedNotes));
     }, 400);
-
-    // Update localStorage immediately
-    const updatedNotes = notes.filter(note => note.id !== id);
-    if (userId) {
-      localStorage.setItem(`notes_${userId}`, JSON.stringify(updatedNotes));
-    }
-    localStorage.setItem("stickyNotes", JSON.stringify(updatedNotes));
 
     // Check if this is a local-only note
     const note = notes.find((n) => n.id === id);
@@ -357,7 +318,7 @@ const Notes = () => {
     // If it's a local-only note, we don't need to call the API
     if (isLocalOnly) return;
 
-    // Delete from server in background
+    // Delete from server
     try {
       const token = localStorage.getItem("token");
       if (!token) return;
@@ -372,6 +333,7 @@ const Notes = () => {
       if (!response.ok) throw new Error("Failed to delete note");
     } catch (err) {
       console.error("Error deleting note:", err);
+      setError("Failed to delete note on server. Your changes are saved locally but may not sync across devices.");
     }
   };
 
