@@ -190,8 +190,7 @@ app.use(
             "https://task-master-teal-eta.vercel.app",
             "http://localhost:5173",
             "https://task-master-pkmojnn37-stmichael9s-projects.vercel.app",
-            "https://task-master-m333.vercel.app/",
-            // Add your frontend URL here if it's not already included
+            "https://task-master-m333.vercel.app",
           ]
         : "http://localhost:5173",
     credentials: true,

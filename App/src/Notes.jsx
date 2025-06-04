@@ -3,48 +3,49 @@ import { v4 as uuidv4 } from "uuid";
 import "./Styles/Notes.css";
 
 const Notes = () => {
+  // Initialize with notes from localStorage for instant loading
   const [notes, setNotes] = useState(() => {
     try {
       const token = localStorage.getItem("token");
-
+      
       // Only load notes if user is authenticated
       if (token) {
         const userData = JSON.parse(localStorage.getItem("userInfo") || "{}");
         const userId = userData.id;
-
+        
         if (userId) {
           const userNotes = localStorage.getItem(`notes_${userId}`);
           if (userNotes) {
             return JSON.parse(userNotes);
           }
         }
-
-        // Fall back to general notes if user-specific not found but still authenticated
+        
+        // Fall back to general notes if user-specific not found
         const savedNotes = localStorage.getItem("stickyNotes");
         return savedNotes ? JSON.parse(savedNotes) : [];
       }
-
-      // If not authenticated, return empty array
+      
       return [];
     } catch (error) {
       console.error("Error loading notes from localStorage:", error);
       return [];
     }
   });
-  
+
   const [newNoteText, setNewNoteText] = useState("");
   const [newNoteColor, setNewNoteColor] = useState("#f8e16c");
   const [newNoteFont, setNewNoteFont] = useState("'Caveat', cursive");
   const [newNoteTextColor, setNewNoteTextColor] = useState("#000000");
   const [animatingNoteId, setAnimatingNoteId] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // Start with false to show content immediately
   const [error, setError] = useState(null);
   const [showFontDropdown, setShowFontDropdown] = useState(false);
   const [userId, setUserId] = useState(null);
+  const [isSyncing, setIsSyncing] = useState(false); // New state for background syncing
   const gridRef = useRef(null);
   const fontDropdownRef = useRef(null);
 
-  // Available fonts with proper CSS font-family format
+  // Rest of your constants remain the same
   const fontOptions = [
     { name: "Handwritten", value: "'Caveat', cursive" },
     { name: "Sans Serif", value: "'Arial', sans-serif" },
@@ -53,68 +54,17 @@ const Notes = () => {
     { name: "Cursive", value: "'Brush Script MT', cursive" },
   ];
 
-  // Available text colors
   const textColors = [
-    "#000000", // Black
-    "#1e40af", // Dark Blue
-    "#047857", // Dark Green
-    "#7c2d12", // Dark Brown
-    "#7e22ce", // Purple
-    "#be123c", // Dark Red
-    "#334155", // Slate
+    "#000000", "#1e40af", "#047857", "#7c2d12", 
+    "#7e22ce", "#be123c", "#334155"
   ];
 
-  // Available sticky note colors
   const noteColors = [
-    "#f8e16c",
-    "#f5a97f",
-    "#c5e1a5",
-    "#80deea",
-    "#ef9a9a",
-    "#ce93d8",
-    "#b0bec5",
-    "#ffcc80",
+    "#f8e16c", "#f5a97f", "#c5e1a5", "#80deea",
+    "#ef9a9a", "#ce93d8", "#b0bec5", "#ffcc80"
   ];
 
-  // API URL from environment variables
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
-
-  // Close font dropdown when clicking outside
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (fontDropdownRef.current && !fontDropdownRef.current.contains(event.target)) {
-        setShowFontDropdown(false);
-      }
-    }
-    
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
-
-  // Inject required fonts
-  useEffect(() => {
-    const fontLinks = [
-      "https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600&display=swap",
-    ];
-    
-    const linkElements = fontLinks.map(href => {
-      const link = document.createElement("link");
-      link.href = href;
-      link.rel = "stylesheet";
-      document.head.appendChild(link);
-      return link;
-    });
-    
-    return () => {
-      linkElements.forEach(link => {
-        if (document.head.contains(link)) {
-          document.head.removeChild(link);
-        }
-      });
-    };
-  }, []);
 
   // Set userId from localStorage
   useEffect(() => {
@@ -128,30 +78,20 @@ const Notes = () => {
     }
   }, []);
 
-  // Fetch notes from server when component mounts
+  // Fetch notes from server in the background after component mounts
   useEffect(() => {
-    fetchNotes();
+    if (userId) {
+      fetchNotesInBackground();
+    }
   }, [userId]);
 
-  // Add a periodic check to ensure notes haven't disappeared
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      if (notes.length === 0 && !loading) {
-        fetchNotes();
-      }
-    }, 30000);
-    
-    return () => clearInterval(intervalId);
-  }, [notes.length, loading]);
-
-  // Fetch notes from the server
-  const fetchNotes = async () => {
-    setLoading(true);
+  // Fetch notes without blocking the UI
+  const fetchNotesInBackground = async () => {
+    setIsSyncing(true);
     try {
       const token = localStorage.getItem("token");
       if (!token) {
-        setNotes([]);
-        setLoading(false);
+        setIsSyncing(false);
         return;
       }
 
@@ -163,7 +103,8 @@ const Notes = () => {
 
       if (response.status === 401) {
         localStorage.removeItem("token");
-        throw new Error("Your session has expired. Please log in again.");
+        setIsSyncing(false);
+        return;
       }
 
       if (!response.ok) {
@@ -171,34 +112,36 @@ const Notes = () => {
       }
 
       const data = await response.json();
-      setNotes(data);
       
-      // Cache the notes in localStorage as backup
-      if (data.length > 0 && userId) {
-        localStorage.setItem(`notes_${userId}`, JSON.stringify(data));
+      // Only update if we got data from the server
+      if (data && data.length > 0) {
+        setNotes(data);
+        
+        // Cache the notes in localStorage
+        if (userId) {
+          localStorage.setItem(`notes_${userId}`, JSON.stringify(data));
+        }
+        localStorage.setItem("stickyNotes", JSON.stringify(data));
       }
     } catch (err) {
       console.error("Error fetching notes:", err);
-      setError(err.message);
-
-      // If token expired, redirect to login
-      if (err.message.includes("session has expired")) {
-        setTimeout(() => {
-          window.location.href = "/login";
-        }, 2000);
-      }
+      // Don't show error to user since this is background sync
     } finally {
-      setLoading(false);
+      setIsSyncing(false);
     }
   };
 
-  // Add a note to the server
+  // Add a note - optimistic update with background sync
   const addNote = async () => {
     if (newNoteText.trim() === "") return;
 
     const rotation = Math.random() * 6 - 3; // Random rotation between -3 and 3 degrees
 
+    // Create a temporary ID for immediate display
+    const tempId = uuidv4();
+    
     const newNote = {
+      id: tempId, // Use temporary ID for optimistic update
       text: newNoteText,
       color: newNoteColor,
       textColor: newNoteTextColor,
@@ -206,55 +149,81 @@ const Notes = () => {
       rotation: rotation,
       pinned: false,
       createdAt: new Date().toISOString(),
+      _isOptimistic: true // Flag to identify this is not yet saved to server
     };
 
+    // Optimistically add to state
+    setNotes(prevNotes => [newNote, ...prevNotes]);
+    setNewNoteText("");
+    setAnimatingNoteId(tempId);
+
+    // Scroll to show the new note animation
+    if (gridRef.current) {
+      gridRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    // Clear animating state after animation completes
+    setTimeout(() => {
+      setAnimatingNoteId(null);
+    }, 800);
+
+    // Save to localStorage immediately
+    const updatedNotes = [newNote, ...notes];
+    if (userId) {
+      localStorage.setItem(`notes_${userId}`, JSON.stringify(updatedNotes));
+    }
+    localStorage.setItem("stickyNotes", JSON.stringify(updatedNotes));
+
+    // Then try to save to server in background
     try {
       const token = localStorage.getItem("token");
-      let savedNote;
+      if (!token) return; // Skip server save if not authenticated
 
-      if (token) {
-        const response = await fetch(`${API_URL}/notes`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(newNote),
-        });
+      const response = await fetch(`${API_URL}/notes`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          text: newNote.text,
+          color: newNote.color,
+          textColor: newNote.textColor,
+          font: newNote.font,
+          rotation: newNote.rotation,
+          pinned: newNote.pinned
+        }),
+      });
 
-        if (!response.ok) throw new Error("Failed to create note");
+      if (!response.ok) throw new Error("Failed to create note");
 
-        savedNote = await response.json();
-      } else {
-        // If no token, create a temporary note with UUID
-        savedNote = {
-          id: uuidv4(),
-          ...newNote,
-          _isLocalOnly: true,
-        };
+      // Get the real note with server-generated ID
+      const savedNote = await response.json();
+      
+      // Replace the optimistic note with the real one
+      setNotes(prevNotes => 
+        prevNotes.map(note => 
+          note.id === tempId ? { ...savedNote } : note
+        )
+      );
+      
+      // Update localStorage with the real note
+      const updatedNotesWithServer = notes.map(note => 
+        note.id === tempId ? { ...savedNote } : note
+      );
+      
+      if (userId) {
+        localStorage.setItem(`notes_${userId}`, JSON.stringify(updatedNotesWithServer));
       }
-
-      // Add the new note to the state
-      setNotes((prevNotes) => [savedNote, ...prevNotes]);
-      setNewNoteText("");
-      setAnimatingNoteId(savedNote.id);
-
-      // Scroll to show the new note animation
-      if (gridRef.current) {
-        gridRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-
-      // Clear animating state after animation completes
-      setTimeout(() => {
-        setAnimatingNoteId(null);
-      }, 800);
+      localStorage.setItem("stickyNotes", JSON.stringify(updatedNotesWithServer));
+      
     } catch (err) {
-      console.error("Error adding note:", err);
-      setError(err.message);
+      console.error("Error adding note to server:", err);
+      // Note remains in UI with temporary ID
     }
   };
 
-  // Update a note on the server
+  // Update a note - optimistic update with background sync
   const updateNoteText = async (id, newText, updates = {}) => {
     // First update locally for immediate feedback
     setNotes(
@@ -262,14 +231,25 @@ const Notes = () => {
         note.id === id ? { ...note, text: newText, ...updates } : note
       )
     );
+    
+    // Update localStorage immediately
+    const updatedNotes = notes.map(note => 
+      note.id === id ? { ...note, text: newText, ...updates } : note
+    );
+    
+    if (userId) {
+      localStorage.setItem(`notes_${userId}`, JSON.stringify(updatedNotes));
+    }
+    localStorage.setItem("stickyNotes", JSON.stringify(updatedNotes));
 
-    // Check if this is a local-only note
+    // Check if this is an optimistic note that hasn't been saved to server yet
     const note = notes.find((n) => n.id === id);
-    if (note && note._isLocalOnly) return;
+    if (note && note._isOptimistic) return;
 
+    // Then try to update on server in background
     try {
       const token = localStorage.getItem("token");
-      if (!token) throw new Error("No authentication token found");
+      if (!token) return;
 
       const response = await fetch(`${API_URL}/notes/${id}`, {
         method: "PUT",
@@ -283,13 +263,13 @@ const Notes = () => {
       if (!response.ok) throw new Error("Failed to update note");
     } catch (err) {
       console.error("Error updating note:", err);
-      setError(err.message);
+      // Note remains updated in UI regardless of server error
     }
   };
 
   // Update note font
   const updateNoteFont = async (id, font) => {
-    const note = notes.find(n => n.id === id);
+    const note = notes.find((n) => n.id === id);
     if (note) {
       updateNoteText(id, note.text, { font });
     }
@@ -297,33 +277,43 @@ const Notes = () => {
 
   // Update note text color
   const updateNoteTextColor = async (id, textColor) => {
-    const note = notes.find(n => n.id === id);
+    const note = notes.find((n) => n.id === id);
     if (note) {
       updateNoteText(id, note.text, { textColor });
     }
   };
 
-  // Toggle pinned status on the server
+  // Toggle pinned status - optimistic update
   const togglePinned = async (id) => {
-    // Find the current note and its pinned status
     const note = notes.find((note) => note.id === id);
     if (!note) return;
 
     const newPinnedStatus = !note.pinned;
 
-    // Update locally first for immediate feedback
+    // Update locally first
     setNotes(
       notes.map((note) =>
         note.id === id ? { ...note, pinned: newPinnedStatus } : note
       )
     );
+    
+    // Update localStorage
+    const updatedNotes = notes.map(note => 
+      note.id === id ? { ...note, pinned: newPinnedStatus } : note
+    );
+    
+    if (userId) {
+      localStorage.setItem(`notes_${userId}`, JSON.stringify(updatedNotes));
+    }
+    localStorage.setItem("stickyNotes", JSON.stringify(updatedNotes));
 
-    // Check if this is a local-only note
-    if (note._isLocalOnly) return;
+    // Skip server update for optimistic notes
+    if (note._isOptimistic) return;
 
+    // Update server in background
     try {
       const token = localStorage.getItem("token");
-      if (!token) throw new Error("No authentication token found");
+      if (!token) return;
 
       const response = await fetch(`${API_URL}/notes/${id}`, {
         method: "PUT",
@@ -337,11 +327,10 @@ const Notes = () => {
       if (!response.ok) throw new Error("Failed to update note");
     } catch (err) {
       console.error("Error toggling pin status:", err);
-      setError(err.message);
     }
   };
 
-  // Delete a note from the server
+  // Delete note - optimistic update
   const deleteNote = async (id) => {
     // Add animation first
     const noteElement = document.getElementById(`note-${id}`);
@@ -349,21 +338,29 @@ const Notes = () => {
       noteElement.classList.add("note-exit");
     }
 
-    // Check if this is a local-only note
-    const note = notes.find((n) => n.id === id);
-    const isLocalOnly = note && note._isLocalOnly;
-
     // Remove from state after animation
     setTimeout(() => {
       setNotes(notes.filter((note) => note.id !== id));
     }, 400);
 
+    // Update localStorage immediately
+    const updatedNotes = notes.filter(note => note.id !== id);
+    if (userId) {
+      localStorage.setItem(`notes_${userId}`, JSON.stringify(updatedNotes));
+    }
+    localStorage.setItem("stickyNotes", JSON.stringify(updatedNotes));
+
+    // Check if this is a local-only note
+    const note = notes.find((n) => n.id === id);
+    const isLocalOnly = note && note._isOptimistic;
+
     // If it's a local-only note, we don't need to call the API
     if (isLocalOnly) return;
 
+    // Delete from server in background
     try {
       const token = localStorage.getItem("token");
-      if (!token) throw new Error("No authentication token found");
+      if (!token) return;
 
       const response = await fetch(`${API_URL}/notes/${id}`, {
         method: "DELETE",
@@ -375,7 +372,6 @@ const Notes = () => {
       if (!response.ok) throw new Error("Failed to delete note");
     } catch (err) {
       console.error("Error deleting note:", err);
-      setError(err.message);
     }
   };
 
@@ -449,16 +445,18 @@ const Notes = () => {
         <div className="font-picker mb-4 relative">
           <button
             onClick={() => setShowFontDropdown(!showFontDropdown)}
-            className={`font-option ${
-              showFontDropdown ? "selected" : ""
-            }`}
+            className={`font-option ${showFontDropdown ? "selected" : ""}`}
             style={{ fontFamily: newNoteFont }}
             aria-label={`Select ${newNoteFont} font`}
           >
-            {fontOptions.find(font => font.value === newNoteFont)?.name || "Select Font"}
+            {fontOptions.find((font) => font.value === newNoteFont)?.name ||
+              "Select Font"}
           </button>
           {showFontDropdown && (
-            <div className="absolute top-full left-0 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 shadow-md z-10" ref={fontDropdownRef}>
+            <div
+              className="absolute top-full left-0 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 shadow-md z-10"
+              ref={fontDropdownRef}
+            >
               {fontOptions.map((font) => (
                 <button
                   key={font.value}
@@ -467,7 +465,9 @@ const Notes = () => {
                     setShowFontDropdown(false);
                   }}
                   className={`font-option block w-full px-4 py-2 text-left ${
-                    newNoteFont === font.value ? "bg-gray-100 dark:bg-gray-700" : ""
+                    newNoteFont === font.value
+                      ? "bg-gray-100 dark:bg-gray-700"
+                      : ""
                   }`}
                   style={{ fontFamily: font.value }}
                   aria-label={`Select ${font.name} font`}
@@ -488,7 +488,10 @@ const Notes = () => {
               className={`text-color-option ${
                 newNoteTextColor === color ? "selected" : ""
               }`}
-              style={{ backgroundColor: color, color: color === "#000000" ? "#ffffff" : "#000000" }}
+              style={{
+                backgroundColor: color,
+                color: color === "#000000" ? "#ffffff" : "#000000",
+              }}
               aria-label={`Select ${color} text color`}
             ></button>
           ))}
