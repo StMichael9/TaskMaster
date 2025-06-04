@@ -34,8 +34,8 @@ const Notes = () => {
   
   const [newNoteText, setNewNoteText] = useState("");
   const [newNoteColor, setNewNoteColor] = useState("#f8e16c");
-  const [newNoteFont, setNewNoteFont] = useState("'Caveat', cursive"); // Default font with proper format
-  const [newNoteTextColor, setNewNoteTextColor] = useState("#000000"); // Default text color
+  const [newNoteFont, setNewNoteFont] = useState("'Caveat', cursive");
+  const [newNoteTextColor, setNewNoteTextColor] = useState("#000000");
   const [animatingNoteId, setAnimatingNoteId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -64,7 +64,19 @@ const Notes = () => {
     "#334155", // Slate
   ];
 
-  // Add this line to get the API URL from environment variables
+  // Available sticky note colors
+  const noteColors = [
+    "#f8e16c",
+    "#f5a97f",
+    "#c5e1a5",
+    "#80deea",
+    "#ef9a9a",
+    "#ce93d8",
+    "#b0bec5",
+    "#ffcc80",
+  ];
+
+  // API URL from environment variables
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
   // Close font dropdown when clicking outside
@@ -81,12 +93,10 @@ const Notes = () => {
     };
   }, []);
 
-  // Inject all required fonts
+  // Inject required fonts
   useEffect(() => {
-    // Create link elements for each font we want to use
     const fontLinks = [
       "https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600&display=swap",
-      // Add other Google Fonts if needed
     ];
     
     const linkElements = fontLinks.map(href => {
@@ -97,7 +107,6 @@ const Notes = () => {
       return link;
     });
     
-    // Cleanup function to remove links when component unmounts
     return () => {
       linkElements.forEach(link => {
         if (document.head.contains(link)) {
@@ -107,9 +116,8 @@ const Notes = () => {
     };
   }, []);
 
-  // Add this useEffect to set userId from localStorage
+  // Set userId from localStorage
   useEffect(() => {
-    // Try to get user ID from localStorage
     try {
       const userData = JSON.parse(localStorage.getItem("userInfo") || "{}");
       if (userData.id) {
@@ -120,21 +128,28 @@ const Notes = () => {
     }
   }, []);
 
+  // Fetch notes from server when component mounts
+  useEffect(() => {
+    fetchNotes();
+  }, [userId]);
+
+  // Add a periodic check to ensure notes haven't disappeared
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      if (notes.length === 0 && !loading) {
+        fetchNotes();
+      }
+    }, 30000);
+    
+    return () => clearInterval(intervalId);
+  }, [notes.length, loading]);
+
   // Fetch notes from the server
   const fetchNotes = async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
       if (!token) {
-        // If not authenticated, try to load from localStorage
-        const recoveredNotes = recoverNotes();
-        if (recoveredNotes.length > 0) {
-          setNotes(recoveredNotes);
-          setLoading(false);
-          return;
-        }
-        
-        // If no recovered notes, show empty list
         setNotes([]);
         setLoading(false);
         return;
@@ -147,17 +162,7 @@ const Notes = () => {
       });
 
       if (response.status === 401) {
-        // Token expired or invalid
-        localStorage.removeItem("token"); // Clear the invalid token
-        
-        // Try to recover notes from localStorage
-        const recoveredNotes = recoverNotes();
-        if (recoveredNotes.length > 0) {
-          setNotes(recoveredNotes);
-          setLoading(false);
-          return;
-        }
-        
+        localStorage.removeItem("token");
         throw new Error("Your session has expired. Please log in again.");
       }
 
@@ -166,171 +171,24 @@ const Notes = () => {
       }
 
       const data = await response.json();
-      
-      // If server returned empty array but we have local notes, use local notes
-      if (data.length === 0) {
-        const recoveredNotes = recoverNotes();
-        if (recoveredNotes.length > 0) {
-          setNotes(recoveredNotes);
-          setLoading(false);
-          return;
-        }
-      }
-      
       setNotes(data);
       
-      // Cache the notes in localStorage
-      if (data.length > 0) {
-        const userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}");
-        const userId = userInfo?.id;
-        if (userId) {
-          localStorage.setItem(`notes_${userId}`, JSON.stringify(data));
-        }
-        localStorage.setItem("stickyNotes", JSON.stringify(data));
+      // Cache the notes in localStorage as backup
+      if (data.length > 0 && userId) {
+        localStorage.setItem(`notes_${userId}`, JSON.stringify(data));
       }
     } catch (err) {
       console.error("Error fetching notes:", err);
       setError(err.message);
 
-      // Try to recover notes from localStorage as fallback
-      const recoveredNotes = recoverNotes();
-      if (recoveredNotes.length > 0) {
-        setNotes(recoveredNotes);
-      }
-
       // If token expired, redirect to login
       if (err.message.includes("session has expired")) {
-        // Use setTimeout to avoid state updates during render
         setTimeout(() => {
           window.location.href = "/login";
         }, 2000);
       }
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Save notes to localStorage for offline access
-  useEffect(() => {
-    if (notes.length > 0) {
-      try {
-        // Always save to both locations for redundancy
-        if (userId) {
-          // If user is logged in, save to user-specific key
-          localStorage.setItem(`notes_${userId}`, JSON.stringify(notes));
-        }
-
-        // Always save to general notes key for backward compatibility
-        localStorage.setItem("stickyNotes", JSON.stringify(notes));
-        
-        // Log successful save for debugging
-        console.log(`Saved ${notes.length} notes to localStorage`);
-      } catch (error) {
-        console.error("Error saving notes to localStorage:", error);
-      }
-    }
-  }, [notes, userId]);
-
-  // Add this function to recover notes if they seem to be missing
-  const recoverNotes = () => {
-    try {
-      // Try multiple sources to recover notes
-      let recoveredNotes = [];
-      
-      // Try user-specific notes first
-      if (userId) {
-        const userNotes = localStorage.getItem(`notes_${userId}`);
-        if (userNotes && JSON.parse(userNotes).length > 0) {
-          recoveredNotes = JSON.parse(userNotes);
-          console.log(`Recovered ${recoveredNotes.length} notes from user-specific storage`);
-          return recoveredNotes;
-        }
-      }
-      
-      // Try general notes storage
-      const generalNotes = localStorage.getItem("stickyNotes");
-      if (generalNotes && JSON.parse(generalNotes).length > 0) {
-        recoveredNotes = JSON.parse(generalNotes);
-        console.log(`Recovered ${recoveredNotes.length} notes from general storage`);
-        return recoveredNotes;
-      }
-      
-      return [];
-    } catch (error) {
-      console.error("Error recovering notes:", error);
-      return [];
-    }
-  };
-
-  // Check for local notes to sync when user logs in
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (token && userId) {
-      // Check if we have any local-only notes to sync
-      const localOnlyNotes = notes.filter(note => note._isLocalOnly);
-      if (localOnlyNotes.length > 0) {
-        syncLocalNotesToServer();
-      }
-    }
-  }, [userId]);
-
-  // Add a periodic check to ensure notes haven't disappeared
-  useEffect(() => {
-    // Check every 30 seconds if notes are still there
-    const intervalId = setInterval(() => {
-      if (notes.length === 0) {
-        const recoveredNotes = recoverNotes();
-        if (recoveredNotes.length > 0) {
-          console.log("Notes disappeared! Recovering from localStorage...");
-          setNotes(recoveredNotes);
-        }
-      }
-    }, 30000);
-    
-    return () => clearInterval(intervalId);
-  }, [notes.length]);
-
-  // Add this function to sync local notes with the server
-  const syncLocalNotesToServer = async () => {
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) return;
-
-      // Get user info from localStorage
-      const userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}");
-      const userId = userInfo?.id;
-      if (!userId) return;
-
-      // Find local-only notes in the current state
-      const localOnlyNotes = notes.filter(note => note._isLocalOnly);
-      if (localOnlyNotes.length === 0) return;
-
-      console.log(`Syncing ${localOnlyNotes.length} local notes to server...`);
-
-      // Upload each local note to the server
-      for (const note of localOnlyNotes) {
-        const { id, _isLocalOnly, ...noteData } = note; // Remove local id and flag
-
-        const response = await fetch(`${API_URL}/notes`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(noteData),
-        });
-
-        if (!response.ok) {
-          console.error("Failed to sync note to server:", note);
-          continue;
-        }
-      }
-
-      // Fetch all notes from server to ensure consistency
-      fetchNotes();
-      console.log("Local notes synced to server successfully");
-    } catch (err) {
-      console.error("Error syncing local notes:", err);
     }
   };
 
@@ -355,32 +213,20 @@ const Notes = () => {
       let savedNote;
 
       if (token) {
-        try {
-          const response = await fetch(`${API_URL}/notes`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify(newNote),
-          });
+        const response = await fetch(`${API_URL}/notes`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(newNote),
+        });
 
-          if (!response.ok) throw new Error("Failed to create note");
+        if (!response.ok) throw new Error("Failed to create note");
 
-          savedNote = await response.json();
-        } catch (err) {
-          console.error("Error adding note to server:", err);
-          setError(err.message);
-
-          // Fallback to local-only note if API fails
-          savedNote = {
-            id: uuidv4(),
-            ...newNote,
-            _isLocalOnly: true, // Flag to indicate this is a local-only note
-          };
-        }
+        savedNote = await response.json();
       } else {
-        // If no token, create a local-only note
+        // If no token, create a temporary note with UUID
         savedNote = {
           id: uuidv4(),
           ...newNote,
@@ -438,11 +284,6 @@ const Notes = () => {
     } catch (err) {
       console.error("Error updating note:", err);
       setError(err.message);
-
-      // Revert the change if the API call fails
-      setNotes(
-        notes.map((n) => (n.id === id ? { ...n, text: note.text, ...updates } : n))
-      );
     }
   };
 
@@ -497,11 +338,6 @@ const Notes = () => {
     } catch (err) {
       console.error("Error toggling pin status:", err);
       setError(err.message);
-
-      // Revert the change if the API call fails
-      setNotes(
-        notes.map((n) => (n.id === id ? { ...n, pinned: note.pinned } : n))
-      );
     }
   };
 
@@ -542,18 +378,6 @@ const Notes = () => {
       setError(err.message);
     }
   };
-
-  // Available sticky note colors
-  const noteColors = [
-    "#f8e16c",
-    "#f5a97f",
-    "#c5e1a5",
-    "#80deea",
-    "#ef9a9a",
-    "#ce93d8",
-    "#b0bec5",
-    "#ffcc80",
-  ];
 
   const getAttachment = () => {
     const types = ["pin-top-left", "pin-top-right", "tape-top"];
