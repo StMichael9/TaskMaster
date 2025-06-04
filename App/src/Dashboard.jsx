@@ -86,7 +86,7 @@ const EmptyState = ({ message, linkTo, linkText, accentColor }) => (
 function Dashboard() {
   // State declarations
   const [tasks, setTasks] = useState([]);
-  const [projects, setProjects] = useState([]);
+  // const [projects, setProjects] = useState([]);
   const [notes, setNotes] = useState([]);
   const [randomNote, setRandomNote] = useState(null);
   const [stats, setStats] = useState({
@@ -94,9 +94,9 @@ function Dashboard() {
     completedTasks: 0,
     overdueTasks: 0,
     highPriorityTasks: 0,
-    totalProjects: 0,
-    activeProjects: 0,
-    completedProjects: 0,
+    // totalProjects: 0,
+    // activeProjects: 0,
+    // completedProjects: 0,
     totalNotes: 0,
   });
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -108,7 +108,7 @@ function Dashboard() {
   const [timeOfDay, setTimeOfDay] = useState("");
   const [selectedDay, setSelectedDay] = useState(null);
   const [pinnedNotes, setPinnedNotes] = useState([]);
-  const [recentProjects, setRecentProjects] = useState([]);
+  // const [recentProjects, setRecentProjects] = useState([]);
 
   // Load pinned notes
   useEffect(() => {
@@ -153,11 +153,11 @@ function Dashboard() {
   useEffect(() => {
     // Load data from localStorage
     const savedTasks = JSON.parse(localStorage.getItem("tasks") || "[]");
-    const savedProjects = JSON.parse(localStorage.getItem("projects") || "[]");
+    // const savedProjects = JSON.parse(localStorage.getItem("projects") || "[]");
     const savedNotes = JSON.parse(localStorage.getItem("stickyNotes") || "[]");
 
     setTasks(savedTasks);
-    setProjects(savedProjects);
+    // setProjects(savedProjects);
     setNotes(savedNotes);
 
     // Select a random note if there are any
@@ -174,19 +174,19 @@ function Dashboard() {
     const highPriority = savedTasks.filter(
       (task) => !task.completed && task.priority === "high"
     ).length;
-    const completedProjects = savedProjects.filter(
-      (project) => project.completed
-    ).length;
-    const activeProjects = savedProjects.length - completedProjects;
+    // const completedProjects = savedProjects.filter(
+    //   (project) => project.completed
+    // ).length;
+    // const activeProjects = savedProjects.length - completedProjects;
 
     setStats({
       totalTasks: savedTasks.length,
       completedTasks: completed,
       overdueTasks: overdue,
       highPriorityTasks: highPriority,
-      totalProjects: savedProjects.length,
-      activeProjects,
-      completedProjects,
+      // totalProjects: savedProjects.length,
+      // activeProjects,
+      // completedProjects,
       totalNotes: savedNotes.length || 0,
     });
 
@@ -212,6 +212,7 @@ function Dashboard() {
   }, [currentDate]);
 
   // Load recent projects
+  /* 
   useEffect(() => {
     try {
       const savedProjects = localStorage.getItem("projects");
@@ -227,6 +228,7 @@ function Dashboard() {
       setRecentProjects([]);
     }
   }, []);
+  */
 
   // Helper functions
   const getDayTasks = (date) => {
@@ -263,8 +265,10 @@ function Dashboard() {
   const productivityScore = Math.min(
     100,
     Math.round(
-      (stats.completedTasks * 10 + stats.completedProjects * 20) /
-        Math.max(1, stats.totalTasks + stats.totalProjects)
+      (stats.completedTasks * 10) /
+        // (stats.completedTasks * 10 + stats.completedProjects * 20) /
+        // Math.max(1, stats.totalTasks + stats.totalProjects)
+        Math.max(1, stats.totalTasks)
     )
   );
 
@@ -612,6 +616,7 @@ function Dashboard() {
       </div>
 
       {/* Recent Projects Section */}
+      {/* 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -670,6 +675,7 @@ function Dashboard() {
           />
         )}
       </motion.div>
+      */}
     </div>
   );
 }
