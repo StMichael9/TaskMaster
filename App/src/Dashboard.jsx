@@ -261,14 +261,11 @@ function Dashboard() {
     (task) => !task.completed && task.dueDate && task.dueDate.startsWith(today)
   );
 
-  // Calculate productivity score
+  // Calculate productivity score - improved version
   const productivityScore = Math.min(
     100,
     Math.round(
-      (stats.completedTasks * 10) /
-        // (stats.completedTasks * 10 + stats.completedProjects * 20) /
-        // Math.max(1, stats.totalTasks + stats.totalProjects)
-        Math.max(1, stats.totalTasks)
+      (stats.completedTasks / Math.max(1, stats.totalTasks)) * 100
     )
   );
 
