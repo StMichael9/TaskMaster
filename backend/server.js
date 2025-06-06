@@ -4,6 +4,18 @@ import path from "path";
 import jwt from "jsonwebtoken"; // Add this import
 import { Sequelize } from "sequelize";
 import fs from "fs";
+import express from "express";
+import cors from "cors";
+import { requireAuth } from "./middleware/auth.js";
+import { loginUser, createUsers } from "./users.js";
+import {
+  createTask,
+  getTasks,
+  updateTask,
+  deleteTask,
+  getProjectTasks,
+} from "./Tasks.js";
+
 // Get the directory name
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -17,18 +29,6 @@ console.log(
     ? "Yes (length: " + process.env.JWT_SECRET.length + ")"
     : "No"
 );
-
-import express from "express";
-import cors from "cors";
-import { requireAuth } from "./middleware/auth.js";
-import { loginUser, createUsers } from "./users.js";
-import {
-  createTask,
-  getTasks,
-  updateTask,
-  deleteTask,
-  getProjectTasks,
-} from "./Tasks.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -47,12 +47,11 @@ const sequelize = new Sequelize({
   logging: false,
 });
 
+// Authenticate and set up database
 sequelize
   .authenticate()
   .then(() => {
     console.log("Database connection has been established successfully.");
-
-    // Log the database location for debugging
     console.log(
       "Database location:",
       process.env.NODE_ENV === "production"
@@ -62,7 +61,6 @@ sequelize
 
     // In production, set up periodic database backups
     if (process.env.NODE_ENV === "production") {
-      // Create a backup directory if it doesn't exist
       const backupDir = path.join(__dirname, "backups");
       try {
         if (!fs.existsSync(backupDir)) {
@@ -72,20 +70,16 @@ sequelize
         console.error("Error creating backup directory:", err);
       }
 
-      // Set up a daily backup schedule
       setInterval(async () => {
         try {
           const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
           const backupPath = path.join(backupDir, `backup-${timestamp}.sqlite`);
-
-          // Copy the database file
           fs.copyFileSync(
             process.env.NODE_ENV === "production"
               ? "/tmp/database.sqlite"
               : path.join(__dirname, "database.sqlite"),
             backupPath
           );
-
           console.log(`Database backed up to ${backupPath}`);
         } catch (err) {
           console.error("Database backup failed:", err);
@@ -97,120 +91,41 @@ sequelize
     console.error("Unable to connect to the database:", err);
   });
 
-// Define your Project model
+// Define models
 const Project = sequelize.define("Project", {
-  name: {
-    type: Sequelize.STRING,
-    allowNull: false,
-  },
-  completed: {
-    type: Sequelize.BOOLEAN,
-    defaultValue: false,
-  },
-  dueDate: {
-    type: Sequelize.DATE,
-    allowNull: true,
-  },
-  priority: {
-    type: Sequelize.STRING,
-    defaultValue: "normal",
-  },
-  userId: {
-    type: Sequelize.INTEGER,
-    allowNull: false,
-    defaultValue: 1, // Add a default value here
-  },
-  createdAt: {
-    type: Sequelize.DATE,
-    defaultValue: Sequelize.NOW,
-  },
+  name: { type: Sequelize.STRING, allowNull: false },
+  completed: { type: Sequelize.BOOLEAN, defaultValue: false },
+  dueDate: { type: Sequelize.DATE, allowNull: true },
+  priority: { type: Sequelize.STRING, defaultValue: "normal" },
+  userId: { type: Sequelize.INTEGER, allowNull: false, defaultValue: 1 },
+  createdAt: { type: Sequelize.DATE, defaultValue: Sequelize.NOW },
 });
 
-// Define your Notes model
 const Note = sequelize.define("Note", {
-  id: {
-    type: Sequelize.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
-  },
-  text: {
-    type: Sequelize.TEXT,
-    allowNull: false,
-  },
-  color: {
-    type: Sequelize.STRING,
-    defaultValue: "#f8e16c",
-  },
-  rotation: {
-    type: Sequelize.FLOAT,
-    defaultValue: 0,
-  },
-  pinned: {
-    type: Sequelize.BOOLEAN,
-    defaultValue: false,
-  },
-  userId: {
-    type: Sequelize.INTEGER,
-    allowNull: false,
-  },
-  font: {
-    type: Sequelize.STRING,
-    defaultValue: "Caveat",
-  },
-  textColor: {
-    type: Sequelize.STRING,
-    defaultValue: "#000000",
-  },
-  createdAt: {
-    type: Sequelize.DATE,
-    defaultValue: Sequelize.NOW,
-  },
-  updatedAt: {
-    type: Sequelize.DATE,
-    defaultValue: Sequelize.NOW,
-  },
+  id: { type: Sequelize.INTEGER, primaryKey: true, autoIncrement: true },
+  text: { type: Sequelize.TEXT, allowNull: false },
+  color: { type: Sequelize.STRING, defaultValue: "#f8e16c" },
+  rotation: { type: Sequelize.FLOAT, defaultValue: 0 },
+  pinned: { type: Sequelize.BOOLEAN, defaultValue: false },
+  userId: { type: Sequelize.INTEGER, allowNull: false },
+  font: { type: Sequelize.STRING, defaultValue: "Caveat" },
+  textColor: { type: Sequelize.STRING, defaultValue: "#000000" },
+  createdAt: { type: Sequelize.DATE, defaultValue: Sequelize.NOW },
+  updatedAt: { type: Sequelize.DATE, defaultValue: Sequelize.NOW },
 });
 
-// Define your Task model
 const Task = sequelize.define("Task", {
-  title: {
-    type: Sequelize.STRING,
-    allowNull: false,
-  },
-  description: {
-    type: Sequelize.TEXT,
-    allowNull: true,
-  },
-  completed: {
-    type: Sequelize.BOOLEAN,
-    defaultValue: false,
-  },
-  dueDate: {
-    type: Sequelize.DATE,
-    allowNull: true,
-  },
-  priority: {
-    type: Sequelize.STRING,
-    defaultValue: "normal",
-  },
-  projectId: {
-    type: Sequelize.INTEGER,
-    allowNull: true,
-  },
-  userId: {
-    type: Sequelize.INTEGER,
-    allowNull: false,
-  },
-  createdAt: {
-    type: Sequelize.DATE,
-    defaultValue: Sequelize.NOW,
-  },
+  title: { type: Sequelize.STRING, allowNull: false },
+  description: { type: Sequelize.TEXT, allowNull: true },
+  completed: { type: Sequelize.BOOLEAN, defaultValue: false },
+  dueDate: { type: Sequelize.DATE, allowNull: true },
+  priority: { type: Sequelize.STRING, defaultValue: "normal" },
+  projectId: { type: Sequelize.INTEGER, allowNull: true },
+  userId: { type: Sequelize.INTEGER, allowNull: false },
+  createdAt: { type: Sequelize.DATE, defaultValue: Sequelize.NOW },
 });
 
-// Make Task available to imported functions
-sequelize.models.Task = Task;
-
-// Sync the model with the database
+// Sync the models with the database
 sequelize
   .sync({ alter: true })
   .then(() => {
@@ -221,22 +136,21 @@ sequelize
   });
 
 // Middleware
-app.use(
-  cors({
-    origin:
-      process.env.NODE_ENV === "production"
-        ? [
-            "https://task-master-teal-eta.vercel.app",
-            "http://localhost:5173",
-            "https://task-master-pkmojnn37-stmichael9s-projects.vercel.app",
-            "https://task-master-m333.vercel.app",
-          ]
-        : "http://localhost:5173",
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
+app.use(cors({
+  origin: process.env.NODE_ENV === "production"
+    ? [
+        "https://task-master-teal-eta.vercel.app",
+        "http://localhost:5173",
+        "https://task-master-pkmojnn37-stmichael9s-projects.vercel.app",
+        "https://task-master-m333.vercel.app",
+      ]
+    : "http://localhost:5173",
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+}));
+
+app.use(express.json()); // Add this to parse JSON bodies
 
 // Add this to handle OPTIONS requests explicitly
 app.options("*", cors());
